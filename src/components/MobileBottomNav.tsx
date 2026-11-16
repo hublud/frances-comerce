@@ -3,7 +3,7 @@
 import React from 'react';
 import { usePathname } from 'next/navigation';
 import { useShop } from '../context/ShopContext';
-import { Home, Heart, ShoppingBag, Grid, Search } from 'lucide-react';
+import { Menu, Heart, ShoppingBag, Grid, Search } from 'lucide-react';
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
@@ -14,7 +14,7 @@ export default function MobileBottomNav() {
     setIsCartOpen,
     setIsWishlistOpen,
     setIsMobileSearchOpen,
-    setActiveCategory,
+    setIsCategoryDrawerOpen,
   } = useShop();
 
   const [isCartBouncing, setIsCartBouncing] = React.useState(false);
@@ -31,11 +31,6 @@ export default function MobileBottomNav() {
   if (pathname?.startsWith('/admin')) {
     return null;
   }
-
-  const handleHomeClick = () => {
-    setActiveCategory('all');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   const handleShopClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -56,14 +51,14 @@ export default function MobileBottomNav() {
     <div className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-card/95 backdrop-blur-md border-t border-border shadow-mobile-nav safe-area-pb">
       <div className="grid grid-cols-5 items-center h-16 px-1">
         
-        {/* 1. Home */}
+        {/* 1. Menu (Triggers Categories Drawer) */}
         <button
-          onClick={handleHomeClick}
+          onClick={() => setIsCategoryDrawerOpen(true)}
           className="flex flex-col items-center justify-center gap-0.5 text-foreground hover:text-primary transition-colors py-1 tap-feedback"
-          aria-label="Home"
+          aria-label="Open categories menu"
         >
-          <Home className="w-5 h-5 text-primary" />
-          <span className="text-[10px] font-bold">Home</span>
+          <Menu className="w-5 h-5 text-primary" />
+          <span className="text-[10px] font-bold">Menu</span>
         </button>
 
         {/* 2. Shop (Anchor Link to Products Section) */}
