@@ -22,16 +22,16 @@ export default function BrandStory() {
         <div className="lg:col-span-6 grid grid-cols-2 gap-3 sm:gap-4">
           <div className="relative aspect-[3/4] rounded-2xl md:rounded-3xl overflow-hidden border border-border bg-secondary shadow-md">
             <Image
-              src="/assets/images/p-basics-1.jpg"
-              alt="Francielle Basics & Lifestyle"
+              src="/assets/images/fancielle-lip-gloss.jpg"
+              alt="Francielle Moisturising Keychain Lip Gloss"
               fill
               className="object-cover"
             />
           </div>
           <div className="relative aspect-[3/4] rounded-2xl md:rounded-3xl overflow-hidden border border-border bg-secondary shadow-md mt-6">
             <Image
-              src="/assets/images/p-acc-1.jpg"
-              alt="Francielle Accessories"
+              src="/assets/images/fancielle-phone-suction.jpg"
+              alt="Francielle Ribbon Bow Phone Suction Mount"
               fill
               className="object-cover"
             />
