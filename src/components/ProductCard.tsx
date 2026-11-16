@@ -45,10 +45,19 @@ export default function ProductCard({ product }: ProductCardProps) {
         setTouchActive(false);
       }}
     >
-      {/* Product Image Stage */}
+      {/* Product Image Stage - Clicking opens Product Quick View */}
       <div
-        className="relative aspect-square overflow-hidden bg-secondary select-none"
-        onTouchStart={() => setTouchActive(!touchActive)}
+        onClick={() => setQuickViewProduct(product)}
+        className="relative aspect-square overflow-hidden bg-secondary select-none cursor-pointer"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setQuickViewProduct(product);
+          }
+        }}
+        aria-label={`View ${product.name} details`}
       >
         <Image
           src={displayImage}
