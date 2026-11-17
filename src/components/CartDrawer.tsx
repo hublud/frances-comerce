@@ -71,7 +71,7 @@ export default function CartDrawer() {
                 Your bag is empty 💗
               </h4>
               <p className="text-xs text-muted-foreground mb-4 max-w-xs mx-auto">
-                Explore our curated collections of daily basics, accessories, bed &amp; lounging, and travel &amp; gifting.
+                Explore our curated collections of phone cases, beauty essentials, bow grips, and lovely girly accessories.
               </p>
               <button
                 onClick={() => setIsCartOpen(false)}

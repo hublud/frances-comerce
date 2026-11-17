@@ -37,6 +37,8 @@ function OrderReceiptContent() {
   const { orders, settings, showToast } = useShop();
 
   const [order, setOrder] = useState<Order | null>(null);
+  const [targetOrderRef, setTargetOrderRef] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [copiedReceipt, setCopiedReceipt] = useState(false);
   const [isDownloadingImage, setIsDownloadingImage] = useState(false);
@@ -55,7 +57,8 @@ function OrderReceiptContent() {
       }
     }
 
-    const cleanId = targetId.replace('#', '').trim();
+    const cleanId = targetId.replace(/^#/, '').trim();
+    setTargetOrderRef(cleanId);
 
     if (!cleanId) {
       if (orders.length > 0) {
@@ -66,45 +69,74 @@ function OrderReceiptContent() {
       return;
     }
 
-    // 1. Look in Context
-    const fromContext = orders.find(
-      o => o.id === cleanId || o.id === `#${cleanId}` || o.id.replace('#', '') === cleanId
-    );
-    if (fromContext) {
-      setOrder(fromContext);
-      setIsLoading(false);
-      triggerConfetti();
-      return;
-    }
+    let isCancelled = false;
 
-    // 2. Look in localStorage
-    try {
-      const saved = localStorage.getItem('fancielle_orders');
-      if (saved) {
-        const parsed: Order[] = JSON.parse(saved);
-        const match = parsed.find(
-          o => o.id === cleanId || o.id === `#${cleanId}` || o.id.replace('#', '') === cleanId
-        );
-        if (match) {
-          setOrder(match);
+    const loadOrder = async () => {
+      // 1. Look in Context
+      const fromContext = orders.find(
+        o => o.id === cleanId || o.id === `#${cleanId}` || o.id.replace(/^#/, '') === cleanId
+      );
+      if (fromContext) {
+        if (!isCancelled) {
+          setOrder(fromContext);
           setIsLoading(false);
           triggerConfetti();
-          return;
+        }
+        return;
+      }
+
+      // 2. Look in localStorage
+      try {
+        const saved = localStorage.getItem('fancielle_orders');
+        if (saved) {
+          const parsed: Order[] = JSON.parse(saved);
+          const match = parsed.find(
+            o => o.id === cleanId || o.id === `#${cleanId}` || o.id.replace(/^#/, '') === cleanId
+          );
+          if (match) {
+            if (!isCancelled) {
+              setOrder(match);
+              setIsLoading(false);
+              triggerConfetti();
+            }
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Error reading orders from localStorage', e);
+      }
+
+      // 3. Fallback: Query Supabase cloud
+      try {
+        const remoteOrder = await fetchOrderByIdFromSupabase(cleanId);
+        if (isCancelled) return;
+        if (remoteOrder) {
+          setOrder(remoteOrder);
+          // Cache in local storage for instant offline / reload access
+          try {
+            const saved = localStorage.getItem('fancielle_orders');
+            const existing: Order[] = saved ? JSON.parse(saved) : [];
+            if (!existing.some(o => o.id === remoteOrder.id || o.id.replace(/^#/, '') === cleanId)) {
+              localStorage.setItem('fancielle_orders', JSON.stringify([remoteOrder, ...existing]));
+            }
+          } catch (err) {}
+          triggerConfetti();
+        }
+      } catch (err) {
+        console.warn('Supabase fetchOrderById error:', err);
+      } finally {
+        if (!isCancelled) {
+          setIsLoading(false);
         }
       }
-    } catch (e) {
-      console.warn('Error reading orders from localStorage', e);
-    }
+    };
 
-    // 3. Fallback: Query Supabase cloud
-    fetchOrderByIdFromSupabase(cleanId).then(remoteOrder => {
-      if (remoteOrder) {
-        setOrder(remoteOrder);
-        triggerConfetti();
-      }
-      setIsLoading(false);
-    });
-  }, [searchParams, orders]);
+    loadOrder();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [searchParams, orders, retryCount]);
 
   const triggerConfetti = () => {
     try {
@@ -197,16 +229,34 @@ Date: ${new Date(order.createdAt).toLocaleDateString()}`;
           <ShoppingBag className="w-8 h-8" />
         </div>
         <h2 className="text-lg font-bold text-foreground">Order Not Found</h2>
+        {targetOrderRef && (
+          <p className="inline-block px-3 py-1 bg-secondary rounded-full text-xs font-mono font-bold text-primary my-2">
+            #{targetOrderRef}
+          </p>
+        )}
         <p className="text-xs text-muted-foreground max-w-sm mt-1 mb-6">
-          We couldn't locate this order reference. Please check the reference or return to the shop.
+          We couldn't locate this order in cloud sync. If the order was placed just moments ago, tap "Check Again" to re-check.
         </p>
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-primary text-primary-foreground text-xs font-bold shadow-md hover:bg-primary/90 transition-all"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Return to Shop</span>
-        </Link>
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setIsLoading(true);
+              setRetryCount(prev => prev + 1);
+            }}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-primary text-primary-foreground text-xs font-bold shadow-md hover:bg-primary/90 transition-all tap-feedback"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Check Again / Refresh</span>
+          </button>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-secondary text-foreground text-xs font-bold hover:bg-secondary/80 transition-all border border-border"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Return to Shop</span>
+          </Link>
+        </div>
       </div>
     );
   }

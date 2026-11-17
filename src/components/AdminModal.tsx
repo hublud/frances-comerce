@@ -3,8 +3,9 @@
 import React, { useState } from 'react';
 import { useShop } from '../context/ShopContext';
 import { Product, ProductVariationType } from '../types';
-import { X, Plus, Trash2, Check, Sparkles, Sliders, RefreshCw, Layers, Palette, Lock, Unlock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { X, Plus, Trash2, Check, Sparkles, Sliders, RefreshCw, Layers, Palette, Lock, Unlock, Eye, EyeOff, AlertCircle, Star, Camera, Loader2, Image as LucideImage } from 'lucide-react';
 import { checkAdminPassword, isAdminAuthenticated, setAdminAuthenticated } from '../lib/auth';
+import { processImageFile, processMultipleImageFiles } from '../lib/image-utils';
 import {
   GIRLY_COLOR_PALETTE,
   extractColorHex,
@@ -49,6 +50,8 @@ export default function AdminModal() {
 
   // Product details form state
   const [prodForm, setProdForm] = useState<Partial<Product>>({});
+  const [galleryUrlInput, setGalleryUrlInput] = useState('');
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
 
   // Authentication state for modal
   const [modalPassword, setModalPassword] = useState('');
@@ -64,7 +67,15 @@ export default function AdminModal() {
       setModalAuthError(null);
       if (currentProduct) {
         setVariations(currentProduct.variations || []);
-        setProdForm({ ...currentProduct });
+        const gallery = Array.isArray(currentProduct.images) && currentProduct.images.length > 0
+          ? [...currentProduct.images]
+          : ([currentProduct.image, currentProduct.hoverImage].filter(Boolean) as string[]);
+        setProdForm({
+          ...currentProduct,
+          image: currentProduct.image || gallery[0] || '',
+          hoverImage: currentProduct.hoverImage || gallery[1] || '',
+          images: gallery,
+        });
       }
     }
   }, [isAdminOpen, selectedProductId]);
@@ -89,8 +100,131 @@ export default function AdminModal() {
     const prod = products.find(p => p.id === id);
     if (prod) {
       setVariations(prod.variations || []);
-      setProdForm({ ...prod });
+      const gallery = Array.isArray(prod.images) && prod.images.length > 0
+        ? [...prod.images]
+        : ([prod.image, prod.hoverImage].filter(Boolean) as string[]);
+      setProdForm({
+        ...prod,
+        image: prod.image || gallery[0] || '',
+        hoverImage: prod.hoverImage || gallery[1] || '',
+        images: gallery,
+      });
     }
+  };
+
+  // Primary cover image upload from device
+  const handlePrimaryImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    try {
+      setIsProcessingImages(true);
+      const dataUrl = await processImageFile(files[0]);
+      setProdForm(prev => {
+        const existingImages = Array.isArray(prev.images) ? [...prev.images] : [];
+        const filtered = existingImages.filter(img => img !== dataUrl);
+        return {
+          ...prev,
+          image: dataUrl,
+          images: [dataUrl, ...filtered],
+        };
+      });
+      showToast('Main product cover updated! 📸', 'sparkle');
+    } catch (err) {
+      console.error(err);
+      showToast('Could not process cover image', 'warning');
+    } finally {
+      setIsProcessingImages(false);
+      e.target.value = '';
+    }
+  };
+
+  // Multiple gallery photos upload from device
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    try {
+      setIsProcessingImages(true);
+      const newImages = await processMultipleImageFiles(files);
+      if (newImages.length > 0) {
+        setProdForm(prev => {
+          const currentGallery = Array.isArray(prev.images) ? [...prev.images] : [];
+          const combined = [...currentGallery];
+          newImages.forEach(img => {
+            if (!combined.includes(img)) combined.push(img);
+          });
+          const primaryImg = prev.image || combined[0] || '';
+          return {
+            ...prev,
+            image: primaryImg,
+            hoverImage: prev.hoverImage || combined[1] || combined[0] || '',
+            images: combined,
+          };
+        });
+        showToast(`Added ${newImages.length} photo(s) to gallery! 🌸`, 'sparkle');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Could not process gallery images', 'warning');
+    } finally {
+      setIsProcessingImages(false);
+      e.target.value = '';
+    }
+  };
+
+  // Add photo to gallery by URL
+  const handleAddGalleryUrl = () => {
+    if (!galleryUrlInput.trim()) return;
+    const url = galleryUrlInput.trim();
+    setProdForm(prev => {
+      const currentGallery = Array.isArray(prev.images) ? [...prev.images] : [];
+      if (!currentGallery.includes(url)) {
+        currentGallery.push(url);
+      }
+      return {
+        ...prev,
+        image: prev.image || currentGallery[0],
+        hoverImage: prev.hoverImage || currentGallery[1] || currentGallery[0],
+        images: currentGallery,
+      };
+    });
+    setGalleryUrlInput('');
+    showToast('Added photo URL to gallery! ✨', 'sparkle');
+  };
+
+  // Set any gallery image as the primary cover
+  const handleSetAsCover = (imgUrl: string) => {
+    setProdForm(prev => {
+      const currentGallery = Array.isArray(prev.images) ? [...prev.images] : [];
+      const rest = currentGallery.filter(i => i !== imgUrl);
+      const newGallery = [imgUrl, ...rest];
+      return {
+        ...prev,
+        image: imgUrl,
+        hoverImage: newGallery[1] || imgUrl,
+        images: newGallery,
+      };
+    });
+    showToast('Set as main cover image! ⭐', 'sparkle');
+  };
+
+  // Remove photo from gallery
+  const handleRemoveGalleryImage = (indexToRemove: number) => {
+    setProdForm(prev => {
+      const currentGallery = Array.isArray(prev.images) ? [...prev.images] : [];
+      const removed = currentGallery[indexToRemove];
+      const filtered = currentGallery.filter((_, i) => i !== indexToRemove);
+      let newMain = prev.image;
+      if (newMain === removed) {
+        newMain = filtered[0] || '';
+      }
+      return {
+        ...prev,
+        image: newMain,
+        hoverImage: filtered[1] || filtered[0] || '',
+        images: filtered,
+      };
+    });
+    showToast('Photo removed from gallery', 'info');
   };
 
   if (!isAdminOpen) return null;
@@ -284,12 +418,22 @@ export default function AdminModal() {
     const isOut = prodForm.isOutOfStock ?? currentProduct.isOutOfStock ?? false;
     const finalStock = isOut ? 0 : Math.max(0, Number(prodForm.stock ?? currentProduct.stock ?? 10));
 
+    const galleryImages = (Array.isArray(prodForm.images) && prodForm.images.length > 0)
+      ? prodForm.images
+      : (prodForm.image ? [prodForm.image] : (currentProduct.images || [currentProduct.image]));
+
+    const primaryImg = prodForm.image || galleryImages[0] || currentProduct.image;
+    const hoverImg = prodForm.hoverImage || galleryImages[1] || primaryImg;
+
     if (activeTab === 'variations') {
       updateProductVariations(currentProduct.id, variations);
     } else {
       updateProduct({
         ...currentProduct,
         ...prodForm,
+        image: primaryImg,
+        hoverImage: hoverImg,
+        images: galleryImages,
         stock: finalStock,
         isOutOfStock: isOut,
         variations,
@@ -304,18 +448,19 @@ export default function AdminModal() {
     const newProd: Product = {
       id: newId,
       name: 'New Girly Item',
-      category: 'basics',
-      categoryLabel: 'Daily Basics',
+      category: 'cases',
+      categoryLabel: 'Phone Cases',
       price: 25000,
       originalPrice: 35000,
       rating: 5.0,
       reviews: 1,
       stock: 10,
       badges: ['new'],
-      image: '/assets/images/p-basics-1.jpg',
-      hoverImage: '/assets/images/p-basics-2.jpg',
+      image: '/assets/images/p-acc-1.jpg',
+      hoverImage: '/assets/images/p-acc-2.jpg',
+      images: ['/assets/images/p-acc-1.jpg', '/assets/images/p-acc-2.jpg'],
       description: 'Hand-picked luxury piece with signature aesthetic.',
-      tags: ['new', 'basics', 'girly'],
+      tags: ['new', 'girly'],
       variations: [
         { name: 'Color', options: ['Blush Pink', 'Cream Vanilla'] },
         { name: 'Size', options: ['S', 'M', 'L'] },
@@ -879,6 +1024,164 @@ export default function AdminModal() {
                 <p className="text-[10px] text-muted-foreground mt-1.5">
                   When marked <strong>Out of Stock</strong>, shoppers cannot checkout online and will be routed to WhatsApp with an inquiry message for restock or preorder.
                 </p>
+              </div>
+
+              {/* Product Media & Gallery Studio */}
+              <div className="sm:col-span-2 p-4 rounded-2xl bg-secondary/30 border border-primary/20 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-border">
+                  <div>
+                    <h4 className="text-xs font-black text-foreground flex items-center gap-1.5">
+                      <LucideImage className="w-3.5 h-3.5 text-primary" />
+                      <span>Product Photos &amp; Gallery</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                        {(prodForm.images?.length || (prodForm.image ? 1 : 0))} Photo{(prodForm.images?.length || (prodForm.image ? 1 : 0)) === 1 ? '' : 's'}
+                      </span>
+                    </h4>
+                    <p className="text-[10px] text-muted-foreground">
+                      Upload main cover photo and additional gallery photos from device.
+                    </p>
+                  </div>
+
+                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold shadow-xs hover:bg-primary/90 transition-all cursor-pointer tap-feedback shrink-0 self-start sm:self-auto">
+                    {isProcessingImages ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="w-3 h-3" />
+                        <span>+ Upload Photos</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={isProcessingImages}
+                      onChange={handleGalleryUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+                  {/* Cover Preview */}
+                  <div className="sm:col-span-4 flex flex-col items-center sm:items-start gap-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                      <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                      <span>Cover Photo</span>
+                    </span>
+
+                    <div className="relative w-full aspect-square max-w-[130px] rounded-xl overflow-hidden border-2 border-primary/40 bg-card group shadow-xs">
+                      {prodForm.image ? (
+                        <>
+                          <img
+                            src={prodForm.image}
+                            alt="Primary Cover"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <label className="p-1.5 rounded-full bg-card text-foreground cursor-pointer shadow-xs" title="Change Cover Photo">
+                              <Camera className="w-3.5 h-3.5 text-primary" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handlePrimaryImageUpload}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        </>
+                      ) : (
+                        <label className="w-full h-full flex flex-col items-center justify-center p-2 text-center cursor-pointer hover:bg-secondary/40">
+                          <LucideImage className="w-6 h-6 text-muted-foreground mb-1" />
+                          <span className="text-[10px] font-bold text-primary">+ Upload</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handlePrimaryImageUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Gallery List */}
+                  <div className="sm:col-span-8 space-y-2">
+                    <div className="flex gap-1.5">
+                      <input
+                        type="url"
+                        placeholder="Or paste image URL..."
+                        value={galleryUrlInput}
+                        onChange={(e) => setGalleryUrlInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddGalleryUrl();
+                          }
+                        }}
+                        className="flex-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddGalleryUrl}
+                        className="px-2.5 py-1.5 rounded-lg bg-secondary text-foreground text-xs font-bold border border-border"
+                      >
+                        + Add
+                      </button>
+                    </div>
+
+                    {/* Thumbnails */}
+                    {prodForm.images && prodForm.images.length > 0 && (
+                      <div className="grid grid-cols-4 gap-2 max-h-36 overflow-y-auto p-1 border border-border/60 rounded-xl bg-card/40">
+                        {prodForm.images.map((imgUrl, idx) => {
+                          const isCover = imgUrl === prodForm.image;
+                          return (
+                            <div
+                              key={idx}
+                              className={`relative aspect-square rounded-lg overflow-hidden border-2 bg-card group ${
+                                isCover ? 'border-primary ring-1 ring-primary/30' : 'border-border'
+                              }`}
+                            >
+                              <img
+                                src={imgUrl}
+                                alt={`Gallery ${idx + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                              {isCover && (
+                                <div className="absolute top-0.5 left-0.5 bg-primary text-primary-foreground text-[7px] font-black uppercase px-1 rounded shadow-xs">
+                                  Cover
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                                {!isCover && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetAsCover(imgUrl)}
+                                    className="p-1 rounded bg-card text-amber-500 shadow-xs"
+                                    title="Make Cover"
+                                  >
+                                    <Star className="w-3 h-3 fill-amber-500" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveGalleryImage(idx)}
+                                  className="p-1 rounded bg-destructive text-destructive-foreground shadow-xs"
+                                  title="Delete Photo"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="sm:col-span-2">

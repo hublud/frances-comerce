@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { Product } from '../types';
 import { useShop } from '../context/ShopContext';
-import { Heart, ShoppingBag, Eye, MessageCircle, Check } from 'lucide-react';
+import { Heart, ShoppingBag, Eye, MessageCircle, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -23,6 +23,53 @@ export default function ProductCard({ product }: ProductCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [touchActive, setTouchActive] = useState(false);
   const [isJustAdded, setIsJustAdded] = useState(false);
+  const [cardImageIndex, setCardImageIndex] = useState(0);
+
+  // Gallery images array
+  const galleryImages = (Array.isArray(product.images) && product.images.length > 0)
+    ? product.images
+    : ([product.image, product.hoverImage].filter(Boolean) as string[]);
+
+  const handlePrevCardImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCardImageIndex(prev => (prev > 0 ? prev - 1 : galleryImages.length - 1));
+  };
+
+  const handleNextCardImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCardImageIndex(prev => (prev < galleryImages.length - 1 ? prev + 1 : 0));
+  };
+
+  // Touch Swipe for Card
+  const [cardTouchStartX, setCardTouchStartX] = useState<number | null>(null);
+  const [cardTouchEndX, setCardTouchEndX] = useState<number | null>(null);
+  const [isSwipingCard, setIsSwipingCard] = useState(false);
+
+  const handleCardTouchStart = (e: React.TouchEvent) => {
+    setCardTouchEndX(null);
+    setCardTouchStartX(e.targetTouches[0].clientX);
+  };
+
+  const handleCardTouchMove = (e: React.TouchEvent) => {
+    setCardTouchEndX(e.targetTouches[0].clientX);
+  };
+
+  const handleCardTouchEnd = () => {
+    if (cardTouchStartX !== null && cardTouchEndX !== null) {
+      const distance = cardTouchStartX - cardTouchEndX;
+      if (Math.abs(distance) > 20) {
+        setIsSwipingCard(true);
+        setTimeout(() => setIsSwipingCard(false), 200);
+      }
+      if (distance > 35) {
+        setCardImageIndex(prev => (prev < galleryImages.length - 1 ? prev + 1 : 0));
+      } else if (distance < -35) {
+        setCardImageIndex(prev => (prev > 0 ? prev - 1 : galleryImages.length - 1));
+      }
+    }
+    setCardTouchStartX(null);
+    setCardTouchEndX(null);
+  };
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -33,8 +80,6 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   const isWished = wishlist.includes(product.id);
   const isOut = Boolean(product.isOutOfStock) || product.stock <= 0;
-
-  const displayImage = isHovered && product.hoverImage ? product.hoverImage : product.image;
 
   return (
     <article
@@ -47,8 +92,14 @@ export default function ProductCard({ product }: ProductCardProps) {
     >
       {/* Product Image Stage - Clicking opens Product Quick View */}
       <div
-        onClick={() => setQuickViewProduct(product)}
-        className="relative aspect-square overflow-hidden bg-secondary select-none cursor-pointer"
+        onClick={() => {
+          if (isSwipingCard) return;
+          setQuickViewProduct(product);
+        }}
+        onTouchStart={handleCardTouchStart}
+        onTouchMove={handleCardTouchMove}
+        onTouchEnd={handleCardTouchEnd}
+        className="relative aspect-square overflow-hidden bg-secondary select-none cursor-pointer touch-pan-y"
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
@@ -59,13 +110,64 @@ export default function ProductCard({ product }: ProductCardProps) {
         }}
         aria-label={`View ${product.name} details`}
       >
-        <Image
-          src={displayImage}
-          alt={product.name}
-          fill
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-        />
+        {/* Slidable Carousel Track */}
+        <div
+          className="flex w-full h-full transition-transform duration-300 ease-out"
+          style={{ transform: `translateX(-${cardImageIndex * 100}%)` }}
+        >
+          {galleryImages.map((img, idx) => (
+            <div key={idx} className="relative w-full h-full shrink-0 aspect-square">
+              <Image
+                src={img}
+                alt={`${product.name} - ${idx + 1}`}
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 pointer-events-none select-none"
+                priority={idx === 0}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Prev / Next Slide Chevrons for Card (desktop hover or mobile tap) */}
+        {galleryImages.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={handlePrevCardImage}
+              className="absolute left-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-background/85 hover:bg-background text-foreground shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 tap-feedback border border-border/40"
+              aria-label="Previous image"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNextCardImage}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-background/85 hover:bg-background text-foreground shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10 tap-feedback border border-border/40"
+              aria-label="Next image"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Slide Dots Indicator */}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-background/75 backdrop-blur-xs z-10 pointer-events-auto border border-border/40">
+              {galleryImages.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCardImageIndex(idx);
+                  }}
+                  className={`rounded-full transition-all ${
+                    cardImageIndex === idx ? 'w-3 h-1 bg-primary' : 'w-1 h-1 bg-foreground/30 hover:bg-foreground/50'
+                  }`}
+                  aria-label={`Go to slide ${idx + 1}`}
+                />
+              ))}
+            </div>
+          </>
+        )}
 
         {/* Out of Stock Badge */}
         {isOut && (

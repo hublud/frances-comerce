@@ -128,10 +128,10 @@ interface ShopContextType {
   toggleWishlist: (productId: string) => void;
   applyCoupon: (code: string) => boolean;
   orders: Order[];
-  saveOrder: (order: Order) => void;
+  saveOrder: (order: Order) => Promise<boolean>;
   deleteOrder: (id: string) => void;
   updateOrderStatus: (id: string, status: Order['status']) => void;
-  createOrder: (customer: CustomerDetails) => string;
+  createOrder: (customer: CustomerDetails) => Promise<string>;
   orderViaWhatsApp: (customer?: CustomerDetails, customShipping?: number) => string;
   updateProduct: (updated: Product) => void;
   updateProductVariations: (productId: string, variations: ProductVariationType[]) => void;
@@ -190,6 +190,26 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       if (savedWish) setWishlist(JSON.parse(savedWish));
       const savedOrders = localStorage.getItem('fancielle_orders');
       if (savedOrders) setOrders(JSON.parse(savedOrders));
+
+      // Synchronize orders with Supabase cloud so all devices & admin see all customer orders
+      fetchOrdersFromSupabase().then(remoteOrders => {
+        if (remoteOrders && remoteOrders.length > 0) {
+          setOrders(prev => {
+            const map = new Map<string, Order>();
+            prev.forEach(o => map.set(o.id.replace(/^#/, ''), o));
+            remoteOrders.forEach(o => map.set(o.id.replace(/^#/, ''), o));
+            const merged = Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+            try {
+              localStorage.setItem('fancielle_orders', JSON.stringify(merged));
+            } catch (err) {}
+            return merged;
+          });
+        }
+      }).catch(err => {
+        console.warn('Background Supabase fetchOrders note:', err);
+      });
     } catch (e) {
       console.error(e);
     }
@@ -413,9 +433,10 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const cartShipping = 0;
   const cartTotal = subtotalAfterDiscount;
 
-  const saveOrder = (newOrder: Order) => {
+  const saveOrder = async (newOrder: Order): Promise<boolean> => {
+    // 1. Immediately store in state & localStorage for instant client access
     setOrders(prev => {
-      const updated = [newOrder, ...prev];
+      const updated = [newOrder, ...prev.filter(o => o.id !== newOrder.id)];
       try {
         localStorage.setItem('fancielle_orders', JSON.stringify(updated));
         localStorage.setItem('fancielle_latest_order_id', newOrder.id);
@@ -424,9 +445,19 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       }
       return updated;
     });
-    saveOrderToSupabase(newOrder).catch(err => {
+
+    // 2. Persist to Supabase cloud database
+    try {
+      const ok = await saveOrderToSupabase(newOrder);
+      if (!ok) {
+        console.warn('Initial Supabase order save returned false, retrying...');
+        await saveOrderToSupabase(newOrder);
+      }
+      return true;
+    } catch (err) {
       console.warn('Background Supabase saveOrder warning:', err);
-    });
+      return false;
+    }
   };
 
   const deleteOrder = (orderId: string) => {
@@ -470,7 +501,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     return { count: 0 };
   };
 
-  const createOrder = (customer: CustomerDetails): string => {
+  const createOrder = async (customer: CustomerDetails): Promise<string> => {
     if (cart.length === 0) {
       showToast('Your bag is empty! Add items first.', 'warning');
       return '';
@@ -491,7 +522,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       status: 'pending',
     };
 
-    saveOrder(newOrder);
+    // Await saving so the order is committed to Supabase before navigating
+    await saveOrder(newOrder);
     clearCart();
     return orderId;
   };
@@ -562,7 +594,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         createdAt: new Date().toISOString(),
         status: 'pending',
       };
-      saveOrder(newOrder);
+      saveOrder(newOrder).catch(() => {});
     }
 
     const rawPhone = settings.phoneWhatsapp.replace(/[^0-9]/g, '');
@@ -647,7 +679,20 @@ export function useShop() {
 }
 
 export function buildOrderWhatsAppUrl(order: Order, phoneWhatsapp?: string, explicitUrl?: string): string {
-  const orderUrl = explicitUrl || (typeof window !== 'undefined' ? `${window.location.origin}/order?id=${order.id}` : `https://francielle.com/order?id=${order.id}`);
+  let orderUrl = explicitUrl;
+  if (!orderUrl && typeof window !== 'undefined') {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    // If testing on localhost, use the live Vercel domain so admin / Frances can open it on their phone!
+    if (isLocalhost) {
+      orderUrl = `https://frances-comerce.vercel.app/order?id=${order.id}`;
+    } else {
+      orderUrl = `${window.location.origin}/order?id=${order.id}`;
+    }
+  }
+  if (!orderUrl) {
+    orderUrl = `https://frances-comerce.vercel.app/order?id=${order.id}`;
+  }
+
   const message = `Hello Frances! I just made an order here: ${orderUrl}`;
 
   const raw = (phoneWhatsapp || '09114336301').replace(/[^0-9]/g, '');

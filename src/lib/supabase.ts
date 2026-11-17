@@ -412,12 +412,28 @@ export async function fetchOrderByIdFromSupabase(orderId: string): Promise<Order
   if (!client) return null;
 
   try {
-    const cleanId = orderId.startsWith('#') ? orderId : '#' + orderId;
-    const { data, error } = await client
+    const rawId = (orderId || '').trim();
+    if (!rawId) return null;
+    const bareId = rawId.replace(/^#/, '').trim();
+    const hashId = '#' + bareId;
+
+    // 1. Try matching bare ID (e.g. FRN-49519)
+    let { data, error } = await client
       .from('orders')
       .select('*')
-      .or(`id.eq.${cleanId},id.eq.${orderId}`)
+      .eq('id', bareId)
       .maybeSingle();
+
+    // 2. Fallback to hash ID (e.g. #FRN-49519) if not found
+    if (!data) {
+      const res2 = await client
+        .from('orders')
+        .select('*')
+        .eq('id', hashId)
+        .maybeSingle();
+      data = res2.data;
+      error = res2.error;
+    }
 
     if (error || !data) {
       return null;

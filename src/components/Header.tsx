@@ -151,7 +151,7 @@ export default function Header() {
               <input
                 type="search"
                 aria-label="Search products"
-                placeholder="Search lovely pieces, daily basics, accessories..."
+                placeholder="Search phone cases, lip glosses, bow grips, accessories..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full h-11 rounded-full border border-border bg-secondary/40 pl-5 pr-12 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:bg-background focus:ring-4 focus:ring-primary/15 transition shadow-inner"

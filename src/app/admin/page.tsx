@@ -54,7 +54,14 @@ import {
   Printer,
   Loader2,
   CheckCircle2,
+  Star,
+  Camera,
+  Image as LucideImage,
 } from 'lucide-react';
+import {
+  processImageFile,
+  processMultipleImageFiles,
+} from '../../lib/image-utils';
 import {
   checkAdminPassword,
   isAdminAuthenticated,
@@ -196,10 +203,15 @@ export default function AdminDashboardPage() {
     badges: ['new'],
     image: '/assets/images/p-acc-1.jpg',
     hoverImage: '/assets/images/p-acc-2.jpg',
+    images: ['/assets/images/p-acc-1.jpg', '/assets/images/p-acc-2.jpg'],
     description: 'Classy girly piece from A Little World of Lovely Things.',
     tags: ['lovely', 'girly', 'classy'],
     variations: [],
   });
+
+  // Gallery & Image processing states
+  const [galleryUrlInput, setGalleryUrlInput] = useState('');
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
 
   // Master Variation Groups Hub state
   const [masterGroups, setMasterGroups] = useState<MasterVariationGroup[]>(() => {
@@ -441,15 +453,23 @@ export default function AdminDashboardPage() {
     const existingVars = Array.isArray(p.variations)
       ? JSON.parse(JSON.stringify(p.variations))
       : [];
+    const gallery = Array.isArray(p.images) && p.images.length > 0
+      ? [...p.images]
+      : ([p.image, p.hoverImage].filter(Boolean) as string[]);
+
     setProdForm({
       ...p,
       isOutOfStock: p.stock <= 0 || Boolean(p.isOutOfStock),
       variations: existingVars,
+      image: p.image || gallery[0] || '',
+      hoverImage: p.hoverImage || gallery[1] || '',
+      images: gallery.length > 0 ? gallery : (p.image ? [p.image] : []),
     });
     setLocalVariations(existingVars);
     setIsAddingVariation(false);
     setIsCustomVariationInputOpen(false);
     setCustomVariationName('');
+    setGalleryUrlInput('');
     setActiveTab('editor');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -488,6 +508,7 @@ export default function AdminDashboardPage() {
       badges: ['new'],
       image: '/assets/images/p-acc-1.jpg',
       hoverImage: '/assets/images/p-acc-2.jpg',
+      images: ['/assets/images/p-acc-1.jpg', '/assets/images/p-acc-2.jpg'],
       description: 'Chic girly item curated to make a girl look classy.',
       tags: ['girly', 'lovely', 'classy'],
       variations: [],
@@ -496,8 +517,124 @@ export default function AdminDashboardPage() {
     setIsAddingVariation(false);
     setIsCustomVariationInputOpen(false);
     setCustomVariationName('');
+    setGalleryUrlInput('');
     setActiveTab('editor');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Primary cover image upload from device
+  const handlePrimaryImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    try {
+      setIsProcessingImages(true);
+      const dataUrl = await processImageFile(files[0]);
+      setProdForm(prev => {
+        const existingImages = Array.isArray(prev.images) ? [...prev.images] : [];
+        const filtered = existingImages.filter(img => img !== dataUrl);
+        return {
+          ...prev,
+          image: dataUrl,
+          images: [dataUrl, ...filtered],
+        };
+      });
+      showToast('Main product cover updated! 📸', 'sparkle');
+    } catch (err) {
+      console.error(err);
+      showToast('Could not process cover image', 'warning');
+    } finally {
+      setIsProcessingImages(false);
+      e.target.value = '';
+    }
+  };
+
+  // Multiple gallery photos upload from device
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    try {
+      setIsProcessingImages(true);
+      const newImages = await processMultipleImageFiles(files);
+      if (newImages.length > 0) {
+        setProdForm(prev => {
+          const currentGallery = Array.isArray(prev.images) ? [...prev.images] : [];
+          const combined = [...currentGallery];
+          newImages.forEach(img => {
+            if (!combined.includes(img)) combined.push(img);
+          });
+          const primaryImg = prev.image || combined[0] || '';
+          return {
+            ...prev,
+            image: primaryImg,
+            hoverImage: prev.hoverImage || combined[1] || combined[0] || '',
+            images: combined,
+          };
+        });
+        showToast(`Added ${newImages.length} photo(s) to gallery! 🌸`, 'sparkle');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Could not process gallery images', 'warning');
+    } finally {
+      setIsProcessingImages(false);
+      e.target.value = '';
+    }
+  };
+
+  // Add photo to gallery by URL
+  const handleAddGalleryUrl = () => {
+    if (!galleryUrlInput.trim()) return;
+    const url = galleryUrlInput.trim();
+    setProdForm(prev => {
+      const currentGallery = Array.isArray(prev.images) ? [...prev.images] : [];
+      if (!currentGallery.includes(url)) {
+        currentGallery.push(url);
+      }
+      return {
+        ...prev,
+        image: prev.image || currentGallery[0],
+        hoverImage: prev.hoverImage || currentGallery[1] || currentGallery[0],
+        images: currentGallery,
+      };
+    });
+    setGalleryUrlInput('');
+    showToast('Added photo URL to gallery! ✨', 'sparkle');
+  };
+
+  // Set any gallery image as the primary cover
+  const handleSetAsCover = (imgUrl: string) => {
+    setProdForm(prev => {
+      const currentGallery = Array.isArray(prev.images) ? [...prev.images] : [];
+      const rest = currentGallery.filter(i => i !== imgUrl);
+      const newGallery = [imgUrl, ...rest];
+      return {
+        ...prev,
+        image: imgUrl,
+        hoverImage: newGallery[1] || imgUrl,
+        images: newGallery,
+      };
+    });
+    showToast('Set as main cover image! ⭐', 'sparkle');
+  };
+
+  // Remove photo from gallery
+  const handleRemoveGalleryImage = (indexToRemove: number) => {
+    setProdForm(prev => {
+      const currentGallery = Array.isArray(prev.images) ? [...prev.images] : [];
+      const removed = currentGallery[indexToRemove];
+      const filtered = currentGallery.filter((_, i) => i !== indexToRemove);
+      let newMain = prev.image;
+      if (newMain === removed) {
+        newMain = filtered[0] || '';
+      }
+      return {
+        ...prev,
+        image: newMain,
+        hoverImage: filtered[1] || filtered[0] || '',
+        images: filtered,
+      };
+    });
+    showToast('Photo removed from gallery', 'info');
   };
 
   // Save product from editor
@@ -527,6 +664,13 @@ export default function AdminDashboardPage() {
       }))
       .filter(v => v.name && v.options.length > 0);
 
+    const galleryImages = (Array.isArray(prodForm.images) && prodForm.images.length > 0)
+      ? prodForm.images
+      : (prodForm.image ? [prodForm.image] : ['/assets/images/p-acc-1.jpg']);
+
+    const primaryImage = prodForm.image || galleryImages[0] || '/assets/images/p-acc-1.jpg';
+    const hoverImg = prodForm.hoverImage || galleryImages[1] || primaryImage;
+
     const readyProduct: Product = {
       id: editingProduct ? editingProduct.id : (prodForm.id || 'prod-' + Date.now()),
       name: prodForm.name.trim(),
@@ -539,8 +683,9 @@ export default function AdminDashboardPage() {
       stock: isOut ? 0 : Math.max(0, Number(prodForm.stock ?? 10)),
       isOutOfStock: isOut,
       badges: prodForm.badges || ['new'],
-      image: prodForm.image || '/assets/images/p-acc-1.jpg',
-      hoverImage: prodForm.hoverImage || '/assets/images/p-acc-2.jpg',
+      image: primaryImage,
+      hoverImage: hoverImg,
+      images: galleryImages,
       description: prodForm.description || '',
       features: prodForm.features || ['Premium quality finish', 'Guaranteed authentic'],
       colorVariants: prodForm.colorVariants || ['Blush Pink', 'Pearl Cream'],
@@ -2398,24 +2543,224 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-foreground block mb-1">Primary Image URL</label>
-                <input
-                  type="text"
-                  value={prodForm.image || ''}
-                  onChange={(e) => setProdForm({ ...prodForm, image: e.target.value })}
-                  className="w-full bg-secondary/30 border border-border rounded-2xl px-4 py-2.5 text-xs sm:text-sm text-foreground outline-none focus:border-primary"
-                />
-              </div>
+              {/* ======================================================== */}
+              {/* PRODUCT MEDIA & GALLERY STUDIO                           */}
+              {/* ======================================================== */}
+              <div className="sm:col-span-2 p-5 sm:p-6 rounded-3xl bg-secondary/30 border border-primary/20 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/80">
+                  <div>
+                    <h4 className="text-sm sm:text-base font-black text-foreground flex items-center gap-2">
+                      <LucideImage className="w-4 h-4 text-primary" />
+                      <span>Product Media &amp; Gallery</span>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                        {(prodForm.images?.length || (prodForm.image ? 1 : 0))} Photo{(prodForm.images?.length || (prodForm.image ? 1 : 0)) === 1 ? '' : 's'}
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Upload your main cover image and extra gallery photos from your phone or PC. Shoppers can swipe through all gallery photos in the store.
+                    </p>
+                  </div>
 
-              <div>
-                <label className="text-xs font-bold text-foreground block mb-1">Hover Image URL (Optional)</label>
-                <input
-                  type="text"
-                  value={prodForm.hoverImage || ''}
-                  onChange={(e) => setProdForm({ ...prodForm, hoverImage: e.target.value })}
-                  className="w-full bg-secondary/30 border border-border rounded-2xl px-4 py-2.5 text-xs sm:text-sm text-foreground outline-none focus:border-primary"
-                />
+                  {/* Multi-upload button for Gallery */}
+                  <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold shadow-md hover:shadow-primary/25 transition-all cursor-pointer tap-feedback shrink-0 self-start sm:self-auto">
+                    {isProcessingImages ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Optimizing Photos...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>+ Upload Photos from Device</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={isProcessingImages}
+                      onChange={handleGalleryUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start pt-1">
+                  {/* Primary Cover Image Preview Card */}
+                  <div className="lg:col-span-4 flex flex-col items-center sm:items-start gap-2">
+                    <div className="flex items-center justify-between w-full max-w-[220px]">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                        <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                        <span>Main Cover Photo</span>
+                      </span>
+                      {prodForm.image && (
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          Active
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="relative w-full aspect-square max-w-[220px] rounded-2xl overflow-hidden border-2 border-primary/40 bg-card shadow-sm group">
+                      {prodForm.image ? (
+                        <>
+                          <img
+                            src={prodForm.image}
+                            alt="Primary Cover"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+                            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card text-foreground hover:bg-card/90 text-xs font-bold cursor-pointer shadow-md tap-feedback">
+                              <Camera className="w-3.5 h-3.5 text-primary" />
+                              <span>Change Cover</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handlePrimaryImageUpload}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        </>
+                      ) : (
+                        <label className="w-full h-full flex flex-col items-center justify-center p-4 text-center cursor-pointer hover:bg-secondary/40 transition-colors">
+                          <LucideImage className="w-8 h-8 text-muted-foreground mb-1" />
+                          <span className="text-xs font-bold text-primary">+ Upload Cover</span>
+                          <span className="text-[10px] text-muted-foreground">Tap to select from device</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handlePrimaryImageUpload}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    <p className="text-[10px] text-muted-foreground max-w-[220px] text-center sm:text-left leading-tight">
+                      This photo represents the product on catalog grids and search cards.
+                    </p>
+                  </div>
+
+                  {/* Gallery Management and URL Input */}
+                  <div className="lg:col-span-8 space-y-3.5">
+                    {/* Add photo by direct URL */}
+                    <div className="bg-card p-3 sm:p-3.5 rounded-2xl border border-border">
+                      <label className="text-[11px] font-bold text-foreground block mb-1.5">
+                        Or Add Photo via Image Web Link (URL)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          placeholder="https://... (paste direct image URL)"
+                          value={galleryUrlInput}
+                          onChange={(e) => setGalleryUrlInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddGalleryUrl();
+                            }
+                          }}
+                          className="flex-1 bg-secondary/30 border border-border rounded-xl px-3 py-2 text-xs text-foreground outline-none focus:border-primary"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddGalleryUrl}
+                          className="px-4 py-2 rounded-xl bg-secondary text-foreground hover:bg-secondary/80 text-xs font-bold border border-border transition-all shrink-0"
+                        >
+                          + Add to Gallery
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Gallery Thumbnails List */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-foreground">
+                          Product Gallery Photos ({prodForm.images?.length || 0})
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          Tap ⭐ to make any photo the main cover
+                        </span>
+                      </div>
+
+                      {(!prodForm.images || prodForm.images.length === 0) ? (
+                        <div className="p-6 rounded-2xl border-2 border-dashed border-border/80 text-center bg-card/40 space-y-1.5">
+                          <LucideImage className="w-8 h-8 text-muted-foreground/60 mx-auto" />
+                          <p className="text-xs font-semibold text-foreground">No gallery photos added yet</p>
+                          <p className="text-[11px] text-muted-foreground max-w-sm mx-auto">
+                            Upload multiple product photos showcasing details, back view, packaging, or variations. Shoppers can swipe through these in the Quick View modal!
+                          </p>
+                          <label className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-secondary hover:bg-secondary/80 border border-border text-xs font-bold text-foreground cursor-pointer mt-2 tap-feedback">
+                            <Plus className="w-3.5 h-3.5 text-primary" />
+                            <span>Select Photos Now</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              disabled={isProcessingImages}
+                              onChange={handleGalleryUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-64 overflow-y-auto p-1 border border-border/60 rounded-2xl bg-card/30">
+                          {prodForm.images.map((imgUrl, idx) => {
+                            const isCover = imgUrl === prodForm.image;
+                            return (
+                              <div
+                                key={idx}
+                                className={`relative aspect-square rounded-xl overflow-hidden border-2 bg-card group shadow-2xs transition-all ${
+                                  isCover ? 'border-primary ring-2 ring-primary/25' : 'border-border hover:border-primary/50'
+                                }`}
+                              >
+                                <img
+                                  src={imgUrl}
+                                  alt={`Gallery item ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+
+                                {/* Badge */}
+                                {isCover ? (
+                                  <div className="absolute top-1.5 left-1.5 bg-primary text-primary-foreground text-[8px] font-black uppercase px-2 py-0.5 rounded-full shadow-xs flex items-center gap-0.5 z-10">
+                                    <Star className="w-2.5 h-2.5 fill-current" />
+                                    <span>Cover</span>
+                                  </div>
+                                ) : (
+                                  <div className="absolute top-1.5 left-1.5 bg-foreground/60 text-background text-[8px] font-bold px-1.5 py-0.5 rounded-md shadow-xs z-10">
+                                    #{idx + 1}
+                                  </div>
+                                )}
+
+                                {/* Overlay Actions */}
+                                <div className="absolute inset-0 bg-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-1 z-20">
+                                  {!isCover && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSetAsCover(imgUrl)}
+                                      className="p-2 rounded-full bg-card/95 hover:bg-card text-amber-500 shadow-md tap-feedback"
+                                      title="Set as Main Cover Photo"
+                                    >
+                                      <Star className="w-4 h-4 fill-amber-500" />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveGalleryImage(idx)}
+                                    className="p-2 rounded-full bg-destructive/95 hover:bg-destructive text-destructive-foreground shadow-md tap-feedback"
+                                    title="Delete Photo from Gallery"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="sm:col-span-2">

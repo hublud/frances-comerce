@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useShop } from '../context/ShopContext';
-import { X, ShoppingBag, MessageCircle, Star, Heart, Check } from 'lucide-react';
+import { X, ShoppingBag, MessageCircle, Star, Heart, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ProductVariationType } from '../types';
 import { extractColorHex, extractColorName } from '../lib/colors';
 
@@ -92,11 +92,46 @@ export default function QuickViewModal() {
     window.open(`https://wa.me/2349114336301?text=${text}`, '_blank');
   };
 
-  const imagesToDisplay = quickViewProduct.images && quickViewProduct.images.length > 0
+  const imagesToDisplay = Array.isArray(quickViewProduct.images) && quickViewProduct.images.length > 0
     ? quickViewProduct.images
-    : [quickViewProduct.image, quickViewProduct.hoverImage].filter(Boolean) as string[];
+    : ([quickViewProduct.image, quickViewProduct.hoverImage].filter(Boolean) as string[]);
 
-  const currentDisplayImage = imagesToDisplay[activeImageIndex] || quickViewProduct.image;
+  const handlePrevImage = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setActiveImageIndex(prev => (prev > 0 ? prev - 1 : imagesToDisplay.length - 1));
+  };
+
+  const handleNextImage = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setActiveImageIndex(prev => (prev < imagesToDisplay.length - 1 ? prev + 1 : 0));
+  };
+
+  // Touch swipe handling for mobile
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+
+  const minSwipeDistance = 40;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEndX(null);
+    setTouchStartX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEndX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX || !touchEndX) return;
+    const distance = touchStartX - touchEndX;
+    if (distance > minSwipeDistance) {
+      handleNextImage();
+    } else if (distance < -minSwipeDistance) {
+      handlePrevImage();
+    }
+    setTouchStartX(null);
+    setTouchEndX(null);
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-4 flex items-center justify-center">
@@ -117,37 +152,106 @@ export default function QuickViewModal() {
         </button>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 items-start">
-          {/* Product Image & Gallery */}
+          {/* Product Image & Slidable Gallery Carousel */}
           <div className="flex flex-col gap-2.5">
-            <div className="relative aspect-square rounded-2xl overflow-hidden border border-border bg-secondary shadow-inner">
-              <Image
-                src={currentDisplayImage}
-                alt={quickViewProduct.name}
-                fill
-                className="object-cover transition-all duration-300"
-              />
+            <div
+              className="relative aspect-square rounded-2xl overflow-hidden border border-border bg-secondary shadow-inner select-none touch-pan-y"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              {/* Slidable flex track */}
+              <div
+                className="flex w-full h-full transition-transform duration-300 ease-out"
+                style={{ transform: `translateX(-${activeImageIndex * 100}%)` }}
+              >
+                {imagesToDisplay.map((img, idx) => (
+                  <div key={idx} className="relative w-full h-full shrink-0 aspect-square">
+                    <Image
+                      src={img}
+                      alt={`${quickViewProduct.name} - Photo ${idx + 1}`}
+                      fill
+                      sizes="(max-width: 640px) 90vw, 350px"
+                      className="object-cover pointer-events-none select-none"
+                      priority={idx === 0}
+                    />
+                  </div>
+                ))}
+              </div>
+
               {/* Out of stock Badge */}
-              <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10">
+              <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 z-10 pointer-events-none">
                 {isOut && (
                   <span className="rounded-full bg-destructive px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-destructive-foreground shadow">
                     Out of Stock
                   </span>
                 )}
               </div>
+
+              {/* Slide Counter Badge */}
+              {imagesToDisplay.length > 1 && (
+                <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-background/80 backdrop-blur-sm text-[10px] font-mono font-bold text-foreground border border-border/60 shadow-xs z-10 pointer-events-none">
+                  {activeImageIndex + 1} / {imagesToDisplay.length}
+                </div>
+              )}
+
+              {/* Prev / Next Slide Chevrons */}
+              {imagesToDisplay.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePrevImage}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-background/85 hover:bg-background text-foreground shadow-md backdrop-blur-sm flex items-center justify-center transition-all z-10 tap-feedback border border-border/40 hover:scale-110 active:scale-95"
+                    aria-label="Previous photo"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNextImage}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-background/85 hover:bg-background text-foreground shadow-md backdrop-blur-sm flex items-center justify-center transition-all z-10 tap-feedback border border-border/40 hover:scale-110 active:scale-95"
+                    aria-label="Next photo"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+
+              {/* Bottom Dot Indicators */}
+              {imagesToDisplay.length > 1 && (
+                <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-background/80 backdrop-blur-sm shadow-xs border border-border/60 z-10">
+                  {imagesToDisplay.map((_, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActiveImageIndex(idx)}
+                      className={`h-1.5 rounded-full transition-all ${
+                        activeImageIndex === idx
+                          ? 'w-4 bg-primary'
+                          : 'w-1.5 bg-foreground/30 hover:bg-foreground/50'
+                      }`}
+                      aria-label={`Go to slide ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Thumbnail switcher if multiple images exist */}
             {imagesToDisplay.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {imagesToDisplay.map((img, idx) => (
                   <button
                     key={idx}
+                    type="button"
                     onClick={() => setActiveImageIndex(idx)}
-                    className={`relative w-14 h-14 rounded-xl overflow-hidden border transition-all shrink-0 ${
-                      activeImageIndex === idx ? 'border-primary ring-2 ring-primary/30 scale-105' : 'border-border opacity-70 hover:opacity-100'
+                    className={`relative w-14 h-14 rounded-xl overflow-hidden border-2 transition-all shrink-0 ${
+                      activeImageIndex === idx
+                        ? 'border-primary ring-2 ring-primary/30 scale-105'
+                        : 'border-border opacity-70 hover:opacity-100'
                     }`}
                   >
-                    <Image src={img} alt={`Thumb ${idx}`} fill className="object-cover" />
+                    <Image src={img} alt={`Thumb ${idx + 1}`} fill className="object-cover" />
                   </button>
                 ))}
               </div>

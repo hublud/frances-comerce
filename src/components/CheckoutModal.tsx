@@ -23,6 +23,7 @@ import {
   CreditCard,
   ArrowLeft,
   ArrowRight,
+  Loader2,
 } from 'lucide-react';
 
 const NIGERIAN_STATES = [
@@ -80,6 +81,7 @@ export default function CheckoutModal() {
   const [showItemsList, setShowItemsList] = useState(false);
   const [copiedAccount, setCopiedAccount] = useState(false);
   const [copiedAmount, setCopiedAmount] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isCheckoutOpen) return null;
 
@@ -100,26 +102,36 @@ export default function CheckoutModal() {
   };
 
   // Step 2: User clicks "I Have Made Transfer"
-  const handleConfirmTransfer = () => {
-    const customer: CustomerDetails = {
-      fullName: fullName.trim(),
-      phone: phone.trim(),
-      phoneAlt: phoneAlt.trim() || undefined,
-      email: email.trim(),
-      state,
-      city: city.trim() || (isKaduna ? 'Kaduna' : isLagos ? 'Lagos' : state),
-      address: address.trim(),
-      landmark: landmark.trim(),
-      notes: notes.trim() || undefined,
-    };
+  const handleConfirmTransfer = async () => {
+    if (isSubmitting) return;
 
-    // Creates and stores the order in Supabase & localStorage, then redirects to order receipt page
-    const orderId = createOrder(customer);
-    if (orderId) {
-      showToast('Transfer recorded! Loading your official receipt... 🌸', 'sparkle');
-      setIsCheckoutOpen(false);
-      setStep('details');
-      router.push(`/order?id=${orderId}`);
+    try {
+      setIsSubmitting(true);
+      const customer: CustomerDetails = {
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        phoneAlt: phoneAlt.trim() || undefined,
+        email: email.trim(),
+        state,
+        city: city.trim() || (isKaduna ? 'Kaduna' : isLagos ? 'Lagos' : state),
+        address: address.trim(),
+        landmark: landmark.trim(),
+        notes: notes.trim() || undefined,
+      };
+
+      // Creates and stores the order in Supabase & localStorage, then redirects to order receipt page
+      const orderId = await createOrder(customer);
+      if (orderId) {
+        showToast('Transfer recorded! Loading your official receipt... 🌸', 'sparkle');
+        setIsCheckoutOpen(false);
+        setStep('details');
+        router.push(`/order?id=${orderId}`);
+      }
+    } catch (err) {
+      console.error('Error during checkout transfer:', err);
+      showToast('Could not complete order. Please try again.', 'warning');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -572,11 +584,21 @@ export default function CheckoutModal() {
             <div className="space-y-2 pt-1">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={handleConfirmTransfer}
-                className="w-full py-4 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-black text-xs sm:text-sm shadow-lg shadow-primary/25 transition-all flex items-center justify-center gap-2 tap-feedback"
+                className="w-full py-4 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-black text-xs sm:text-sm shadow-lg shadow-primary/25 transition-all flex items-center justify-center gap-2 tap-feedback disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>I Have Made Transfer ✓</span>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Confirming Order...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>I Have Made Transfer ✓</span>
+                  </>
+                )}
               </button>
 
               <button
