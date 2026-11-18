@@ -5,7 +5,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useShop } from '../../context/ShopContext';
 import { Product, ProductVariationType, CategoryType, StoreSettings, Order } from '../../types';
-import { PRODUCTS } from '../../data/products';
 import { SUPABASE_SQL_SCHEMA, getSupabaseConfig, saveSupabaseConfig, testSupabaseConnection } from '../../lib/supabase';
 import {
   Package,
@@ -230,7 +229,7 @@ export default function AdminDashboardPage() {
     }
 
     const initial: MasterVariationGroup[] = JSON.parse(JSON.stringify(DEFAULT_MASTER_VARIATION_GROUPS));
-    PRODUCTS.forEach((p) => {
+    products.forEach((p) => {
       if (Array.isArray(p.variations)) {
         p.variations.forEach((pv) => {
           const pName = pv.name.trim();

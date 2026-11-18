@@ -3,11 +3,11 @@
 import React from 'react';
 import Image from 'next/image';
 import { useShop } from '../context/ShopContext';
-import { PRODUCTS } from '../data/products';
 import { X, Heart, ShoppingBag, Trash2 } from 'lucide-react';
 
 export default function WishlistDrawer() {
   const {
+    products,
     wishlist,
     isWishlistOpen,
     setIsWishlistOpen,
@@ -17,7 +17,7 @@ export default function WishlistDrawer() {
 
   if (!isWishlistOpen) return null;
 
-  const wishedProducts = PRODUCTS.filter(p => wishlist.includes(p.id));
+  const wishedProducts = products.filter(p => wishlist.includes(p.id));
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">

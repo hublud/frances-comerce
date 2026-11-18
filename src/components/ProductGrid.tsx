@@ -2,7 +2,6 @@
 
 import React, { useMemo } from 'react';
 import { useShop } from '../context/ShopContext';
-import { PRODUCTS } from '../data/products';
 import ProductCard from './ProductCard';
 import { SlidersHorizontal } from 'lucide-react';
 

@@ -1200,13 +1200,33 @@ export default function AdminModal() {
 
         {/* Footer Actions */}
         <div className="pt-4 border-t border-border flex flex-wrap items-center justify-between gap-3">
-          <button
-            onClick={resetCatalog}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Reset to Factory Defaults</span>
-          </button>
+          <div className="flex items-center gap-3">
+            {currentProduct && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(`Are you sure you want to permanently delete "${currentProduct.name}" from your shop?`)) {
+                    deleteProduct(currentProduct.id);
+                    const remaining = products.filter(p => p.id !== currentProduct.id);
+                    setSelectedProductId(remaining[0]?.id || '');
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground text-xs font-bold transition-all tap-feedback"
+                title="Delete this product"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Product</span>
+              </button>
+            )}
+
+            <button
+              onClick={resetCatalog}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-destructive transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Reset Catalog</span>
+            </button>
+          </div>
 
           <div className="flex gap-2">
             <button

@@ -5,7 +5,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useShop } from '../context/ShopContext';
 import { Search, Heart, ShoppingBag, Sparkles, Phone, Star, X, Truck } from 'lucide-react';
-import { PRODUCTS } from '../data/products';
 
 export default function Header() {
   const {

@@ -149,8 +149,35 @@ interface ShopContextType {
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
 
+// Helper functions for tracking permanently deleted product IDs across devices & cache
+const getDeletedProductIds = (): string[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('fancielle_deleted_product_ids');
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+const markProductAsDeleted = (id: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const current = getDeletedProductIds();
+    if (!current.includes(id)) {
+      current.push(id);
+      localStorage.setItem('fancielle_deleted_product_ids', JSON.stringify(current));
+    }
+  } catch (e) {
+    console.error(e);
+  }
+};
+
 export function ShopProvider({ children }: { children: React.ReactNode }) {
-  const [products, setProducts] = useState<Product[]>(() => PRODUCTS.map(ensureProductVariations));
+  const [products, setProducts] = useState<Product[]>(() => {
+    const deleted = getDeletedProductIds();
+    return PRODUCTS.filter(p => !deleted.includes(p.id)).map(ensureProductVariations);
+  });
   const [settings, setSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<string[]>([]);
@@ -170,16 +197,23 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [appliedCoupon, setAppliedCoupon] = useState('');
   const [toast, setToast] = useState<ToastState>({ show: false, message: '', type: 'info' });
 
-  // Load from localStorage on mount
+  // Load from localStorage & Supabase cloud on mount
   useEffect(() => {
     try {
+      const deletedIds = getDeletedProductIds();
       const savedProducts = localStorage.getItem('fancielle_custom_catalog');
       if (savedProducts) {
         const parsed = JSON.parse(savedProducts);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setProducts(parsed.map(ensureProductVariations));
+          const filtered = parsed
+            .map(ensureProductVariations)
+            .filter(p => !deletedIds.includes(p.id));
+          setProducts(filtered);
         }
+      } else if (deletedIds.length > 0) {
+        setProducts(prev => prev.filter(p => !deletedIds.includes(p.id)));
       }
+
       const savedSettings = localStorage.getItem('fancielle_settings');
       if (savedSettings) {
         setSettings(prev => ({ ...prev, ...JSON.parse(savedSettings) }));
@@ -191,7 +225,35 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       const savedOrders = localStorage.getItem('fancielle_orders');
       if (savedOrders) setOrders(JSON.parse(savedOrders));
 
-      // Synchronize orders with Supabase cloud so all devices & admin see all customer orders
+      // 1. Synchronize product catalog with Supabase cloud so all devices & customers see live catalog
+      fetchProductsFromSupabase().then(async remoteProducts => {
+        const activeDeletedIds = getDeletedProductIds();
+        if (remoteProducts !== null && remoteProducts.length > 0) {
+          // Live Supabase products exist! Filter out any deleted IDs
+          const activeList = remoteProducts
+            .map(ensureProductVariations)
+            .filter(p => !activeDeletedIds.includes(p.id));
+
+          setProducts(activeList);
+          try {
+            localStorage.setItem('fancielle_custom_catalog', JSON.stringify(activeList));
+          } catch (e) {}
+        } else if (remoteProducts !== null && remoteProducts.length === 0) {
+          // Supabase products table is currently empty! Seed it with our active catalog
+          const toSeed = PRODUCTS
+            .map(ensureProductVariations)
+            .filter(p => !activeDeletedIds.includes(p.id));
+          if (toSeed.length > 0) {
+            syncAllProductsToSupabase(toSeed).catch(err => {
+              console.warn('Initial catalog seed note:', err);
+            });
+          }
+        }
+      }).catch(err => {
+        console.warn('Background Supabase fetchProducts note:', err);
+      });
+
+      // 2. Synchronize orders with Supabase cloud so all devices & admin see all customer orders
       fetchOrdersFromSupabase().then(remoteOrders => {
         if (remoteOrders && remoteOrders.length > 0) {
           setOrders(prev => {
@@ -210,6 +272,30 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       }).catch(err => {
         console.warn('Background Supabase fetchOrders note:', err);
       });
+
+      // 3. Multi-Tab sync listener for real-time consistency
+      const handleStorageChange = (e: StorageEvent) => {
+        if (e.key === 'fancielle_custom_catalog' && e.newValue) {
+          try {
+            const parsed = JSON.parse(e.newValue);
+            if (Array.isArray(parsed)) {
+              const currentDeleted = getDeletedProductIds();
+              setProducts(parsed.map(ensureProductVariations).filter(p => !currentDeleted.includes(p.id)));
+            }
+          } catch (err) {}
+        }
+        if (e.key === 'fancielle_deleted_product_ids' && e.newValue) {
+          try {
+            const deleted = JSON.parse(e.newValue);
+            if (Array.isArray(deleted)) {
+              setProducts(prev => prev.filter(p => !deleted.includes(p.id)));
+            }
+          } catch (err) {}
+        }
+      };
+
+      window.addEventListener('storage', handleStorageChange);
+      return () => window.removeEventListener('storage', handleStorageChange);
     } catch (e) {
       console.error(e);
     }
@@ -304,17 +390,32 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteProduct = (productId: string) => {
+    // 1. Mark in permanent deleted blacklist
+    markProductAsDeleted(productId);
+
+    // 2. Filter from products list & update state + localStorage
     const nextList = products.filter(p => p.id !== productId);
     saveCatalog(nextList);
-    deleteProductFromSupabase(productId).catch(() => {});
-    showToast(`Product deleted.`, 'info');
+
+    // 3. Clean up from cart and wishlist if present
+    setCart(prev => prev.filter(item => item.id !== productId));
+    setWishlist(prev => prev.filter(id => id !== productId));
+
+    // 4. Delete from Supabase cloud database
+    deleteProductFromSupabase(productId).catch(err => {
+      console.warn('Supabase deleteProduct note:', err);
+    });
+
+    showToast('Product deleted.', 'info');
   };
 
   const resetCatalog = () => {
+    localStorage.removeItem('fancielle_deleted_product_ids');
     const fresh = PRODUCTS.map(ensureProductVariations);
     saveCatalog(fresh);
     localStorage.removeItem('fancielle_custom_catalog');
-    showToast(`Reset catalog to factory defaults 💖`, 'sparkle');
+    syncAllProductsToSupabase(fresh).catch(() => {});
+    showToast('Reset catalog to factory defaults 💖', 'sparkle');
   };
 
   const addToCart = (
@@ -323,6 +424,9 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     variant?: string,
     selectedVariations?: Record<string, string>
   ) => {
+    const deleted = getDeletedProductIds();
+    if (deleted.includes(productId)) return;
+
     const product = products.find(p => p.id === productId) || PRODUCTS.find(p => p.id === productId);
     if (!product) return;
 
@@ -394,6 +498,9 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleWishlist = (productId: string) => {
+    const deleted = getDeletedProductIds();
+    if (deleted.includes(productId)) return;
+
     const product = products.find(p => p.id === productId) || PRODUCTS.find(p => p.id === productId);
     setWishlist(prev => {
       const exists = prev.includes(productId);
