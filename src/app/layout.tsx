@@ -10,6 +10,7 @@ import MobileBottomNav from '../components/MobileBottomNav';
 import AdminModal from '../components/AdminModal';
 import CategoryDrawer from '../components/CategoryDrawer';
 import FloatingCategoryButton from '../components/FloatingCategoryButton';
+import FloatingCartButton from '../components/FloatingCartButton';
 import PWAInstallPrompt from '../components/PWAInstallPrompt';
 
 export const metadata: Metadata = {
@@ -137,6 +138,8 @@ export default function RootLayout({
           <ToastContainer />
           {/* Floating Category Filter FAB */}
           <FloatingCategoryButton />
+          {/* Floating Desktop Bag & Checkout FAB */}
+          <FloatingCartButton />
           {/* Mobile Bottom App Navigation */}
           <MobileBottomNav />
           {/* Progressive Web App (PWA) Install Recommendation */}

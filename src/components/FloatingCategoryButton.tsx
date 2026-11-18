@@ -35,7 +35,7 @@ export default function FloatingCategoryButton() {
     : products.filter(p => p.category === activeCategory).length;
 
   return (
-    <aside aria-label="Floating Category Filter" className="hidden md:block fixed bottom-8 right-6 md:right-8 z-40">
+    <aside aria-label="Floating Category Filter" className="hidden md:block fixed bottom-22 right-6 md:right-8 z-40">
       <button
         onClick={() => setIsCategoryDrawerOpen(true)}
         className="group relative flex items-center gap-2 pl-3.5 pr-4 py-2.5 sm:py-3 rounded-full bg-gradient-to-r from-primary via-primary/95 to-destructive text-primary-foreground font-black text-xs sm:text-sm shadow-xl shadow-primary/30 hover:shadow-2xl hover:shadow-primary/40 border border-white/25 hover:scale-105 active:scale-95 transition-all duration-300 tap-feedback backdrop-blur-md"
