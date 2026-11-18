@@ -227,22 +227,16 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
       // 1. Synchronize product catalog with Supabase cloud so all devices & customers see live catalog
       fetchProductsFromSupabase().then(async remoteProducts => {
-        const activeDeletedIds = getDeletedProductIds();
         if (remoteProducts !== null && remoteProducts.length > 0) {
-          // Live Supabase products exist! Filter out any deleted IDs
-          const activeList = remoteProducts
-            .map(ensureProductVariations)
-            .filter(p => !activeDeletedIds.includes(p.id));
-
+          // Live Supabase products exist! Database is the true single source of truth
+          const activeList = remoteProducts.map(ensureProductVariations);
           setProducts(activeList);
           try {
             localStorage.setItem('fancielle_custom_catalog', JSON.stringify(activeList));
           } catch (e) {}
         } else if (remoteProducts !== null && remoteProducts.length === 0) {
           // Supabase products table is currently empty! Seed it with our active catalog
-          const toSeed = PRODUCTS
-            .map(ensureProductVariations)
-            .filter(p => !activeDeletedIds.includes(p.id));
+          const toSeed = PRODUCTS.map(ensureProductVariations);
           if (toSeed.length > 0) {
             syncAllProductsToSupabase(toSeed).catch(err => {
               console.warn('Initial catalog seed note:', err);
@@ -602,8 +596,12 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       return { count: 0, error: 'Could not fetch from Supabase. Ensure database tables are created.' };
     }
     if (remote.length > 0) {
-      saveCatalog(remote);
-      return { count: remote.length };
+      try {
+        localStorage.removeItem('fancielle_deleted_product_ids');
+      } catch (e) {}
+      const formatted = remote.map(ensureProductVariations);
+      saveCatalog(formatted);
+      return { count: formatted.length };
     }
     return { count: 0 };
   };

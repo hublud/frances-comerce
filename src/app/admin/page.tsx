@@ -1897,6 +1897,41 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
+            {/* Products Action & Cloud Sync Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 px-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-foreground">
+                  {filteredProducts.length} Product{filteredProducts.length === 1 ? '' : 's'} Active
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 text-[10px] font-bold border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Supabase Live
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePullCatalogFromSupabase}
+                  disabled={isFetchingProducts}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-secondary hover:bg-secondary/80 text-foreground text-xs font-bold transition-all border border-border tap-feedback"
+                  title="Pull latest live catalog from Supabase database"
+                >
+                  <Download className={`w-3.5 h-3.5 text-primary ${isFetchingProducts ? 'animate-bounce' : ''}`} />
+                  <span>{isFetchingProducts ? 'Pulling...' : 'Pull Live from Database'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={startNewProduct}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold shadow-xs transition-all tap-feedback"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Product</span>
+                </button>
+              </div>
+            </div>
+
             {/* Products List Table / Cards */}
             <div className="grid grid-cols-1 gap-3">
               {filteredProducts.length === 0 ? (
