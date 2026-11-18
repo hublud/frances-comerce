@@ -1,7 +1,6 @@
-// Francielle Progressive Web App Service Worker
-const CACHE_NAME = 'francielle-pwa-v3';
+// Francielle Progressive Web App Service Worker - Version 6 (Zero-Cache Live Catalog)
+const CACHE_NAME = 'francielle-pwa-v6';
 const STATIC_ASSETS = [
-  '/',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
@@ -23,6 +22,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('[SW] Purging stale cache bucket:', key);
             return caches.delete(key);
           }
         })
@@ -38,41 +38,33 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // 1. NEVER intercept external origins (e.g. Supabase API, external images, WhatsApp)
+  // 1. NEVER intercept external origins (Supabase API, external images, WhatsApp)
   if (url.origin !== self.location.origin) return;
 
-  // 2. NEVER intercept admin, order, or api routes — they must always be 100% live
+  // 2. Navigation requests (HTML documents like /, /admin, /order) must ALWAYS be 100% network live
   if (
+    event.request.mode === 'navigate' ||
     url.pathname.startsWith('/admin') ||
     url.pathname.startsWith('/order') ||
     url.pathname.startsWith('/api') ||
     url.pathname.includes('/_next/webpack-hmr')
   ) {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        // Fallback to cache ONLY if completely offline
+        return caches.match(event.request);
+      })
+    );
     return;
   }
 
-  // Network first with cache fallback for static assets
+  // 3. Static icons & manifest: Stale while revalidate or network first
   event.respondWith(
-    fetch(event.request)
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return networkResponse;
-      })
-      .catch(() => {
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          if (event.request.mode === 'navigate') {
-            return caches.match('/');
-          }
-        });
-      })
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request);
+    })
   );
 });
-

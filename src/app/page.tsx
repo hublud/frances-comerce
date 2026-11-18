@@ -25,7 +25,7 @@ export default function HomePage() {
       {/* Curated Product Catalog */}
       <ProductGrid />
 
-      {/* Fast Delivery & Trust Showcase (Replacing AI Concierge) */}
+      {/* Fast Delivery & Trust Showcase */}
       <FastDeliveryShowcase />
 
       {/* Infinite Marquee Ticker */}
@@ -34,10 +34,10 @@ export default function HomePage() {
       {/* Brand Story */}
       <BrandStory />
 
-      {/* Customer Feedback & Reviews (Testimonials) */}
+      {/* Customer Feedback & Reviews */}
       <CustomerReviews />
 
-      {/* Trust & Guarantee Highlights Ribbon (Under Testimonials) */}
+      {/* Trust & Guarantee Highlights Ribbon */}
       <TrustBadges />
 
       {/* Footer */}

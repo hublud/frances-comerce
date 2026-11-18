@@ -108,6 +108,10 @@ create policy "Public read orders" on public.orders for select using (true);
 
 drop policy if exists "Public update orders" on public.orders;
 create policy "Public update orders" on public.orders for update using (true) with check (true);
+
+-- 6. Enable Supabase Realtime multi-device sync
+alter publication supabase_realtime add table public.products;
+alter publication supabase_realtime add table public.orders;
 `;
 
 export interface SupabaseConfig {

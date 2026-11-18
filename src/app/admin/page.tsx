@@ -651,10 +651,7 @@ export default function AdminDashboardPage() {
       cases: 'Phone Cases',
       beauty: 'Beauty & Glam',
       accessories: 'Girly Accessories',
-      lifestyle: 'Classy Lifestyle',
-      basics: 'Daily Basics',
-      bed: 'Bed & Lounging',
-      travel: 'Travel & Gifting',
+      lifestyle: 'Classy Lifestyle & Gifting',
     };
 
     const isOut = Boolean(prodForm.isOutOfStock) || Number(prodForm.stock) <= 0;
