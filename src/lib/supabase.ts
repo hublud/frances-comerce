@@ -129,17 +129,19 @@ function getFallbackAnonKey(): string {
     : '';
 }
 
+function cleanEnvString(val: string | undefined): string {
+  if (!val) return '';
+  return val.trim().replace(/^["']|["']$/g, '');
+}
+
 export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
-  url: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://npfftaxeqhtuqdaaosti.supabase.co',
-  anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || getFallbackAnonKey(),
+  url: cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_URL) || 'https://npfftaxeqhtuqdaaosti.supabase.co',
+  anonKey: cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) || getFallbackAnonKey(),
 };
 
 export function getSupabaseConfig(): SupabaseConfig {
   if (typeof window === 'undefined') {
-    return {
-      url: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://npfftaxeqhtuqdaaosti.supabase.co',
-      anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || getFallbackAnonKey(),
-    };
+    return DEFAULT_SUPABASE_CONFIG;
   }
 
   const stored = localStorage.getItem('fancielle_supabase_config');
@@ -151,8 +153,8 @@ export function getSupabaseConfig(): SupabaseConfig {
   }
 
   return {
-    url: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://npfftaxeqhtuqdaaosti.supabase.co',
-    anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || getFallbackAnonKey(),
+    url: cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_URL) || 'https://npfftaxeqhtuqdaaosti.supabase.co',
+    anonKey: cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) || getFallbackAnonKey(),
   };
 }
 

@@ -228,15 +228,29 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       // 1. Synchronize product catalog with Supabase cloud so all devices & customers see live catalog
       fetchProductsFromSupabase().then(async remoteProducts => {
         if (remoteProducts !== null && remoteProducts.length > 0) {
-          // Live Supabase products exist! Database is the true single source of truth
-          const activeList = remoteProducts.map(ensureProductVariations);
+          // Live Supabase products exist! Filter out any products marked as deleted
+          const deleted = getDeletedProductIds();
+          const activeList = remoteProducts
+            .map(ensureProductVariations)
+            .filter(p => !deleted.includes(p.id));
+
           setProducts(activeList);
           try {
             localStorage.setItem('fancielle_custom_catalog', JSON.stringify(activeList));
           } catch (e) {}
+
+          // If any locally deleted products are still in Supabase, purge them from the cloud database
+          remoteProducts.forEach(p => {
+            if (deleted.includes(p.id)) {
+              deleteProductFromSupabase(p.id).catch(() => {});
+            }
+          });
         } else if (remoteProducts !== null && remoteProducts.length === 0) {
-          // Supabase products table is currently empty! Seed it with our active catalog
-          const toSeed = PRODUCTS.map(ensureProductVariations);
+          // Supabase products table is currently empty! Seed it with our active catalog (excluding deleted)
+          const deleted = getDeletedProductIds();
+          const toSeed = PRODUCTS
+            .filter(p => !deleted.includes(p.id))
+            .map(ensureProductVariations);
           if (toSeed.length > 0) {
             syncAllProductsToSupabase(toSeed).catch(err => {
               console.warn('Initial catalog seed note:', err);
@@ -395,8 +409,14 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     setCart(prev => prev.filter(item => item.id !== productId));
     setWishlist(prev => prev.filter(id => id !== productId));
 
-    // 4. Delete from Supabase cloud database
-    deleteProductFromSupabase(productId).catch(err => {
+    // 4. Delete from Supabase cloud database with automatic retry
+    deleteProductFromSupabase(productId).then(ok => {
+      if (!ok) {
+        setTimeout(() => {
+          deleteProductFromSupabase(productId).catch(() => {});
+        }, 500);
+      }
+    }).catch(err => {
       console.warn('Supabase deleteProduct note:', err);
     });
 
