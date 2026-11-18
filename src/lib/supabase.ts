@@ -138,27 +138,43 @@ function cleanEnvString(val: string | undefined): string {
   return val.trim().replace(/^["']|["']$/g, '');
 }
 
+export const AUTHORITATIVE_SUPABASE_URL = 'https://npfftaxeqhtuqdaaosti.supabase.co';
+
 export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
-  url: cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_URL) || 'https://npfftaxeqhtuqdaaosti.supabase.co',
+  url: cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_URL) || AUTHORITATIVE_SUPABASE_URL,
   anonKey: cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) || getFallbackAnonKey(),
 };
 
 export function getSupabaseConfig(): SupabaseConfig {
-  if (typeof window === 'undefined') {
-    return DEFAULT_SUPABASE_CONFIG;
-  }
+  const fallbackKey = getFallbackAnonKey();
+  const envUrl = cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  const envKey = cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
-  const stored = localStorage.getItem('fancielle_supabase_config');
-  if (stored) {
+  // In browser, check for any legacy broken config in localStorage
+  if (typeof window !== 'undefined') {
     try {
-      const parsed = JSON.parse(stored);
-      if (parsed.url && parsed.anonKey) return parsed;
-    } catch (e) {}
+      const stored = localStorage.getItem('fancielle_supabase_config');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // If stored config has an old invalid key (e.g. sb_secret_LM8w), purge it immediately
+        if (
+          !parsed.anonKey ||
+          parsed.anonKey.includes('sb_secret_LM8w') ||
+          parsed.anonKey.length < 20
+        ) {
+          localStorage.removeItem('fancielle_supabase_config');
+        } else if (parsed.url && parsed.anonKey) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      localStorage.removeItem('fancielle_supabase_config');
+    }
   }
 
   return {
-    url: cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_URL) || 'https://npfftaxeqhtuqdaaosti.supabase.co',
-    anonKey: cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) || getFallbackAnonKey(),
+    url: envUrl || AUTHORITATIVE_SUPABASE_URL,
+    anonKey: envKey || fallbackKey,
   };
 }
 
@@ -341,7 +357,8 @@ export async function testSupabaseConnection(): Promise<{
 
 export async function fetchProductsFromSupabase(): Promise<Product[] | null> {
   const client = getSupabaseClient();
-  if (!client) return null;
+  const config = getSupabaseConfig();
+  if (!client || !config.url || !config.anonKey) return null;
 
   try {
     const { data, error } = await client
@@ -349,53 +366,118 @@ export async function fetchProductsFromSupabase(): Promise<Product[] | null> {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.warn('Supabase fetchProducts error:', error.message);
-      return null;
-    }
-
-    if (data && Array.isArray(data)) {
+    if (!error && data && Array.isArray(data)) {
       return data.map(rowToProduct);
     }
-    return [];
+    if (error) {
+      console.warn('Supabase fetchProducts SDK error, trying direct REST fetch:', error.message);
+    }
   } catch (err) {
-    console.error('Supabase fetchProducts exception:', err);
-    return null;
+    console.warn('Supabase fetchProducts SDK exception, trying direct REST fetch:', err);
   }
+
+  // Direct REST fetch fallback
+  try {
+    const endpoint = `${config.url}/rest/v1/products?select=*&order=created_at.desc`;
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        apikey: config.anonKey,
+        Authorization: `Bearer ${config.anonKey}`,
+      },
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (Array.isArray(json)) return json.map(rowToProduct);
+    }
+  } catch (err) {
+    console.error('Direct REST fetchProducts exception:', err);
+  }
+
+  return null;
 }
 
-export async function upsertProductToSupabase(p: Product): Promise<boolean> {
+export async function upsertProductToSupabase(p: Product): Promise<{ ok: boolean; error?: string }> {
   const client = getSupabaseClient();
-  if (!client) return false;
+  const config = getSupabaseConfig();
+  if (!client || !config.url || !config.anonKey) {
+    return { ok: false, error: 'Database connection not configured' };
+  }
+
+  const row = productToRow(p);
 
   try {
-    const row = productToRow(p);
     const { error } = await client.from('products').upsert(row);
-    if (error) {
-      console.error('Supabase upsertProduct error:', error.message);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error('Supabase upsertProduct exception:', err);
-    return false;
+    if (!error) return { ok: true };
+    console.warn('Supabase SDK upsert error, trying direct REST fallback:', error.message);
+  } catch (err: any) {
+    console.warn('Supabase SDK upsert exception, trying direct REST fallback:', err?.message);
+  }
+
+  // Direct REST fallback
+  try {
+    const endpoint = `${config.url}/rest/v1/products`;
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        apikey: config.anonKey,
+        Authorization: `Bearer ${config.anonKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=representation',
+      },
+      body: JSON.stringify(row),
+    });
+
+    if (res.ok) return { ok: true };
+    const errText = await res.text();
+    return { ok: false, error: `HTTP ${res.status}: ${errText || res.statusText}` };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Network request failed' };
   }
 }
 
-export async function deleteProductFromSupabase(productId: string): Promise<boolean> {
+export async function deleteProductFromSupabase(productId: string): Promise<{ ok: boolean; error?: string }> {
   const client = getSupabaseClient();
-  if (!client) return false;
+  const config = getSupabaseConfig();
+
+  if (!client || !config.url || !config.anonKey) {
+    return { ok: false, error: 'Database connection not configured' };
+  }
 
   try {
+    // 1. Try deleting via Supabase JS SDK
     const { error } = await client.from('products').delete().eq('id', productId);
-    if (error) {
-      console.error('Supabase deleteProduct error:', error.message);
-      return false;
+    if (!error) {
+      return { ok: true };
     }
-    return true;
-  } catch (err) {
-    console.error('Supabase deleteProduct exception:', err);
-    return false;
+    console.warn('Supabase SDK delete error, trying direct REST fetch:', error.message);
+  } catch (err: any) {
+    console.warn('Supabase SDK delete exception, trying direct REST fetch:', err?.message);
+  }
+
+  // 2. Direct REST fetch fallback (bypasses any SDK client issue)
+  try {
+    const endpoint = `${config.url}/rest/v1/products?id=eq.${encodeURIComponent(productId)}`;
+    const res = await fetch(endpoint, {
+      method: 'DELETE',
+      headers: {
+        apikey: config.anonKey,
+        Authorization: `Bearer ${config.anonKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+    });
+
+    if (res.ok) {
+      return { ok: true };
+    }
+
+    const errorText = await res.text();
+    console.error('Direct REST delete failed:', res.status, errorText);
+    return { ok: false, error: `HTTP ${res.status}: ${errorText || res.statusText}` };
+  } catch (err: any) {
+    console.error('Direct REST delete exception:', err);
+    return { ok: false, error: err?.message || 'Network fetch failed' };
   }
 }
 
@@ -417,25 +499,42 @@ export async function syncAllProductsToSupabase(products: Product[]): Promise<{ 
 
 export async function saveOrderToSupabase(order: Order): Promise<boolean> {
   const client = getSupabaseClient();
-  if (!client) return false;
+  const config = getSupabaseConfig();
+  if (!client || !config.url || !config.anonKey) return false;
+
+  const row = orderToRow(order);
 
   try {
-    const row = orderToRow(order);
     const { error } = await client.from('orders').upsert(row);
-    if (error) {
-      console.error('Supabase saveOrder error:', error.message);
-      return false;
-    }
-    return true;
+    if (!error) return true;
+    console.warn('Supabase SDK saveOrder error, trying direct REST fetch:', error.message);
   } catch (err) {
-    console.error('Supabase saveOrder exception:', err);
+    console.warn('Supabase SDK saveOrder exception, trying direct REST fetch:', err);
+  }
+
+  try {
+    const endpoint = `${config.url}/rest/v1/orders`;
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        apikey: config.anonKey,
+        Authorization: `Bearer ${config.anonKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=representation',
+      },
+      body: JSON.stringify(row),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('Direct REST saveOrder exception:', err);
     return false;
   }
 }
 
 export async function fetchOrderByIdFromSupabase(orderId: string): Promise<Order | null> {
   const client = getSupabaseClient();
-  if (!client) return null;
+  const config = getSupabaseConfig();
+  if (!client || !config.url || !config.anonKey) return null;
 
   try {
     const rawId = (orderId || '').trim();
@@ -452,29 +551,83 @@ export async function fetchOrderByIdFromSupabase(orderId: string): Promise<Order
 
     // 2. Fallback to hash ID (e.g. #FRN-49519) if not found
     if (!data) {
-      const res2 = await client
+      const res = await client
         .from('orders')
         .select('*')
         .eq('id', hashId)
         .maybeSingle();
-      data = res2.data;
-      error = res2.error;
+      data = res.data;
     }
 
-    if (error || !data) {
-      return null;
+    if (data) {
+      return rowToOrder(data);
     }
-
-    return rowToOrder(data);
   } catch (err) {
     console.error('Supabase fetchOrderById exception:', err);
-    return null;
+  }
+
+  // Direct REST fallback
+  try {
+    const bareId = orderId.replace(/^#/, '').trim();
+    const endpoint = `${config.url}/rest/v1/orders?id=eq.${encodeURIComponent(bareId)}&select=*`;
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        apikey: config.anonKey,
+        Authorization: `Bearer ${config.anonKey}`,
+      },
+    });
+    if (res.ok) {
+      const list = await res.json();
+      if (Array.isArray(list) && list.length > 0) {
+        return rowToOrder(list[0]);
+      }
+    }
+  } catch (err) {
+    console.error('Direct REST fetchOrderById exception:', err);
+  }
+
+  return null;
+}
+
+export async function updateOrderStatusInSupabase(orderId: string, status: Order['status']): Promise<boolean> {
+  const client = getSupabaseClient();
+  const config = getSupabaseConfig();
+  if (!client || !config.url || !config.anonKey) return false;
+
+  try {
+    const { error } = await client
+      .from('orders')
+      .update({ order_status: status })
+      .eq('id', orderId);
+
+    if (!error) return true;
+  } catch (err) {
+    console.warn('Supabase SDK updateOrderStatus exception, trying direct REST fetch:', err);
+  }
+
+  try {
+    const endpoint = `${config.url}/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}`;
+    const res = await fetch(endpoint, {
+      method: 'PATCH',
+      headers: {
+        apikey: config.anonKey,
+        Authorization: `Bearer ${config.anonKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ order_status: status }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('Direct REST updateOrderStatus exception:', err);
+    return false;
   }
 }
 
 export async function fetchOrdersFromSupabase(): Promise<Order[] | null> {
   const client = getSupabaseClient();
-  if (!client) return null;
+  const config = getSupabaseConfig();
+  if (!client || !config.url || !config.anonKey) return null;
 
   try {
     const { data, error } = await client
@@ -482,40 +635,29 @@ export async function fetchOrdersFromSupabase(): Promise<Order[] | null> {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.warn('Supabase fetchOrders error:', error.message);
-      return null;
-    }
-
-    if (data && Array.isArray(data)) {
+    if (!error && data && Array.isArray(data)) {
       return data.map(rowToOrder);
     }
-    return [];
   } catch (err) {
-    console.error('Supabase fetchOrders exception:', err);
-    return null;
+    console.warn('Supabase SDK fetchOrders exception, trying direct REST fetch:', err);
   }
-}
-
-export async function updateOrderStatusInSupabase(
-  orderId: string,
-  status: Order['status']
-): Promise<boolean> {
-  const client = getSupabaseClient();
-  if (!client) return false;
 
   try {
-    const { error } = await client
-      .from('orders')
-      .update({ order_status: status })
-      .eq('id', orderId);
-    if (error) {
-      console.error('Supabase updateOrderStatus error:', error.message);
-      return false;
+    const endpoint = `${config.url}/rest/v1/orders?select=*&order=created_at.desc`;
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        apikey: config.anonKey,
+        Authorization: `Bearer ${config.anonKey}`,
+      },
+    });
+    if (res.ok) {
+      const list = await res.json();
+      if (Array.isArray(list)) return list.map(rowToOrder);
     }
-    return true;
   } catch (err) {
-    console.error('Supabase updateOrderStatus exception:', err);
-    return false;
+    console.error('Direct REST fetchOrders exception:', err);
   }
+
+  return null;
 }

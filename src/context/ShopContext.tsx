@@ -179,11 +179,12 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
 
   // 1. Core live initialization: purge local catalog caches & stream directly from Supabase
   useEffect(() => {
-    // A. Permanently purge any stale local catalog cache from this browser
+    // A. Permanently purge any stale local catalog cache & invalid credentials from this browser
     if (typeof window !== 'undefined') {
       try {
         localStorage.removeItem('fancielle_custom_catalog');
         localStorage.removeItem('fancielle_deleted_product_ids');
+        localStorage.removeItem('fancielle_supabase_config');
       } catch (e) {}
 
       // Prompt Service Worker to discard obsolete caches
@@ -366,9 +367,9 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const updateProduct = async (updated: Product) => {
     const updatedWithVars = ensureProductVariations(updated);
     setProducts(prev => prev.map(p => (p.id === updated.id ? updatedWithVars : p)));
-    const ok = await upsertProductToSupabase(updatedWithVars);
-    if (!ok) {
-      showToast(`Warning: Failed to update "${updated.name}" in database.`, 'warning');
+    const res = await upsertProductToSupabase(updatedWithVars);
+    if (!res.ok) {
+      showToast(`Warning: Failed to update "${updated.name}": ${res.error || 'Check connection'}`, 'warning');
     } else {
       showToast(`Updated "${updated.name}" in live database! 💗`, 'sparkle');
     }
@@ -392,17 +393,21 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     );
 
     if (updatedProd) {
-      await upsertProductToSupabase(updatedProd);
-      showToast('Variations saved to live database! ✨', 'sparkle');
+      const res = await upsertProductToSupabase(updatedProd);
+      if (!res.ok) {
+        showToast(`Failed to save variations: ${res.error || 'Check connection'}`, 'warning');
+      } else {
+        showToast('Variations saved to live database! ✨', 'sparkle');
+      }
     }
   };
 
   const addProduct = async (newProd: Product) => {
     const readyProd = ensureProductVariations(newProd);
     setProducts(prev => [readyProd, ...prev.filter(p => p.id !== readyProd.id)]);
-    const ok = await upsertProductToSupabase(readyProd);
-    if (!ok) {
-      showToast(`Warning: Failed to add "${newProd.name}" to database.`, 'warning');
+    const res = await upsertProductToSupabase(readyProd);
+    if (!res.ok) {
+      showToast(`Warning: Failed to add "${newProd.name}": ${res.error || 'Check connection'}`, 'warning');
     } else {
       showToast(`Added "${newProd.name}" to live database! 🌸`, 'sparkle');
     }
@@ -415,12 +420,12 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     setCart(prev => prev.filter(item => item.id !== productId));
     setWishlist(prev => prev.filter(id => id !== productId));
 
-    // Live Supabase delete
-    const ok = await deleteProductFromSupabase(productId);
-    if (!ok) {
+    // Live Supabase delete (SDK + direct REST fallback)
+    const res = await deleteProductFromSupabase(productId);
+    if (!res.ok) {
       // Revert if database delete failed
       setProducts(previousProducts);
-      showToast('Failed to delete from database. Please check your connection.', 'warning');
+      showToast(`Delete failed: ${res.error || 'Database error. Please check your connection.'}`, 'warning');
       return;
     }
 

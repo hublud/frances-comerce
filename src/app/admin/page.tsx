@@ -3998,7 +3998,7 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   onClick={handleSaveSupabase}
                   className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold shadow-md hover:shadow-primary/30 transition-all tap-feedback"
@@ -4007,9 +4007,22 @@ export default function AdminDashboardPage() {
                   <span>Save Supabase Config</span>
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.removeItem('fancielle_supabase_config');
+                    const fresh = getSupabaseConfig();
+                    setSupabaseConfigState(fresh);
+                    showToast('Reset to official Francielle Supabase credentials! 🟢', 'sparkle');
+                  }}
+                  className="px-4 py-2 rounded-full border border-border hover:bg-secondary text-xs font-semibold text-muted-foreground hover:text-foreground transition-all"
+                >
+                  Restore Defaults
+                </button>
+
                 <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground px-3 py-1.5 rounded-full bg-secondary">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
-                  <span>Auto-saved in .env.local</span>
+                  <span>Cloud Database Active</span>
                 </div>
               </div>
             </div>
