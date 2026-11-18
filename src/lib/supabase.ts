@@ -140,6 +140,14 @@ function cleanEnvString(val: string | undefined): string {
 
 export const AUTHORITATIVE_SUPABASE_URL = 'https://npfftaxeqhtuqdaaosti.supabase.co';
 
+export function getServerSecretKey(): string {
+  const envKey =
+    cleanEnvString(process.env.SUPABASE_SERVICE_ROLE_KEY) ||
+    cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  if (envKey) return envKey;
+  return getFallbackAnonKey();
+}
+
 export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
   url: cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_URL) || AUTHORITATIVE_SUPABASE_URL,
   anonKey: cleanEnvString(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) || getFallbackAnonKey(),
@@ -356,9 +364,27 @@ export async function testSupabaseConnection(): Promise<{
 }
 
 export async function fetchProductsFromSupabase(): Promise<Product[] | null> {
+  // 1. If running in browser, call our secure server-side API route
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/products', {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.ok && Array.isArray(json.products)) {
+          return json.products;
+        }
+      }
+    } catch (apiErr) {
+      console.warn('API /api/products fetch error, falling back to direct SDK:', apiErr);
+    }
+  }
+
+  // 2. Direct SDK fallback (for server environments or fallback)
   const client = getSupabaseClient();
-  const config = getSupabaseConfig();
-  if (!client || !config.url || !config.anonKey) return null;
+  if (!client) return null;
 
   try {
     const { data, error } = await client
@@ -369,115 +395,80 @@ export async function fetchProductsFromSupabase(): Promise<Product[] | null> {
     if (!error && data && Array.isArray(data)) {
       return data.map(rowToProduct);
     }
-    if (error) {
-      console.warn('Supabase fetchProducts SDK error, trying direct REST fetch:', error.message);
-    }
   } catch (err) {
-    console.warn('Supabase fetchProducts SDK exception, trying direct REST fetch:', err);
-  }
-
-  // Direct REST fetch fallback
-  try {
-    const endpoint = `${config.url}/rest/v1/products?select=*&order=created_at.desc`;
-    const res = await fetch(endpoint, {
-      method: 'GET',
-      headers: {
-        apikey: config.anonKey,
-        Authorization: `Bearer ${config.anonKey}`,
-      },
-    });
-    if (res.ok) {
-      const json = await res.json();
-      if (Array.isArray(json)) return json.map(rowToProduct);
-    }
-  } catch (err) {
-    console.error('Direct REST fetchProducts exception:', err);
+    console.error('Supabase fetchProducts SDK exception:', err);
   }
 
   return null;
 }
 
 export async function upsertProductToSupabase(p: Product): Promise<{ ok: boolean; error?: string }> {
+  // 1. If running in browser, call secure server-side API route (prevents secret key exposure)
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/products/upsert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(p),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        return { ok: true };
+      }
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    } catch (err: any) {
+      console.warn('API /api/products/upsert failed, attempting direct SDK fallback:', err);
+    }
+  }
+
+  // 2. Direct SDK execution (for protected server environments)
   const client = getSupabaseClient();
-  const config = getSupabaseConfig();
-  if (!client || !config.url || !config.anonKey) {
+  if (!client) {
     return { ok: false, error: 'Database connection not configured' };
   }
 
-  const row = productToRow(p);
-
   try {
+    const row = productToRow(p);
     const { error } = await client.from('products').upsert(row);
     if (!error) return { ok: true };
-    console.warn('Supabase SDK upsert error, trying direct REST fallback:', error.message);
+    return { ok: false, error: error.message };
   } catch (err: any) {
-    console.warn('Supabase SDK upsert exception, trying direct REST fallback:', err?.message);
-  }
-
-  // Direct REST fallback
-  try {
-    const endpoint = `${config.url}/rest/v1/products`;
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        apikey: config.anonKey,
-        Authorization: `Bearer ${config.anonKey}`,
-        'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates,return=representation',
-      },
-      body: JSON.stringify(row),
-    });
-
-    if (res.ok) return { ok: true };
-    const errText = await res.text();
-    return { ok: false, error: `HTTP ${res.status}: ${errText || res.statusText}` };
-  } catch (err: any) {
-    return { ok: false, error: err?.message || 'Network request failed' };
+    return { ok: false, error: err?.message || 'Upsert exception' };
   }
 }
 
 export async function deleteProductFromSupabase(productId: string): Promise<{ ok: boolean; error?: string }> {
-  const client = getSupabaseClient();
-  const config = getSupabaseConfig();
+  // 1. If running in browser, ALWAYS call our secure server-side API route
+  // This completely eliminates "Forbidden use of secret API key in browser"
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch('/api/products/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: productId }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        return { ok: true };
+      }
+      return { ok: false, error: data.error || `HTTP ${res.status}` };
+    } catch (err: any) {
+      console.warn('API /api/products/delete failed, attempting direct SDK fallback:', err);
+    }
+  }
 
-  if (!client || !config.url || !config.anonKey) {
+  // 2. Direct SDK execution (for protected server environments)
+  const client = getSupabaseClient();
+  if (!client) {
     return { ok: false, error: 'Database connection not configured' };
   }
 
   try {
-    // 1. Try deleting via Supabase JS SDK
     const { error } = await client.from('products').delete().eq('id', productId);
-    if (!error) {
-      return { ok: true };
-    }
-    console.warn('Supabase SDK delete error, trying direct REST fetch:', error.message);
+    if (!error) return { ok: true };
+    return { ok: false, error: error.message };
   } catch (err: any) {
-    console.warn('Supabase SDK delete exception, trying direct REST fetch:', err?.message);
-  }
-
-  // 2. Direct REST fetch fallback (bypasses any SDK client issue)
-  try {
-    const endpoint = `${config.url}/rest/v1/products?id=eq.${encodeURIComponent(productId)}`;
-    const res = await fetch(endpoint, {
-      method: 'DELETE',
-      headers: {
-        apikey: config.anonKey,
-        Authorization: `Bearer ${config.anonKey}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation',
-      },
-    });
-
-    if (res.ok) {
-      return { ok: true };
-    }
-
-    const errorText = await res.text();
-    console.error('Direct REST delete failed:', res.status, errorText);
-    return { ok: false, error: `HTTP ${res.status}: ${errorText || res.statusText}` };
-  } catch (err: any) {
-    console.error('Direct REST delete exception:', err);
-    return { ok: false, error: err?.message || 'Network fetch failed' };
+    return { ok: false, error: err?.message || 'Delete exception' };
   }
 }
 

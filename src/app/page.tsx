@@ -10,6 +10,9 @@ import BrandStory from '../components/BrandStory';
 import CustomerReviews from '../components/CustomerReviews';
 import Footer from '../components/Footer';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function HomePage() {
   return (
     <main className="min-h-screen flex flex-col">
