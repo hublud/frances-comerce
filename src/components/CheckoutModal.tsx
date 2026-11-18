@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import Image from 'next/image';
+import SafeImage from './SafeImage';
 import { useRouter } from 'next/navigation';
 import { useShop } from '../context/ShopContext';
 import { CustomerDetails } from '../types';
@@ -387,7 +387,7 @@ export default function CheckoutModal() {
                         <div className="flex items-center gap-2 truncate pr-2">
                           {item.image && (
                             <div className="relative w-7 h-7 rounded-md overflow-hidden border border-border flex-shrink-0">
-                              <Image src={item.image} alt={item.name} fill className="object-cover" />
+                              <SafeImage src={item.image} alt={item.name} fill className="object-cover" />
                             </div>
                           )}
                           <div className="truncate">

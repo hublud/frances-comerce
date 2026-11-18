@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import Image from 'next/image';
+import SafeImage from './SafeImage';
 import { useShop } from '../context/ShopContext';
 import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, MessageCircle, Truck } from 'lucide-react';
 
@@ -84,7 +84,7 @@ export default function CartDrawer() {
             cart.map((item, idx) => (
               <div key={`${item.id}-${idx}`} className="py-3.5 flex gap-3 first:pt-0">
                 <div className="relative w-18 h-18 rounded-xl overflow-hidden border border-border bg-secondary shrink-0">
-                  <Image src={item.image} alt={item.name} fill className="object-cover" />
+                  <SafeImage src={item.image} alt={item.name} fill className="object-cover" />
                 </div>
 
                 <div className="flex-1 flex flex-col justify-between min-w-0">

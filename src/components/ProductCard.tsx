@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import Image from 'next/image';
+import SafeImage from './SafeImage';
 import { Product } from '../types';
 import { useShop } from '../context/ShopContext';
 import { Heart, ShoppingBag, Eye, MessageCircle, Check, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -26,9 +26,11 @@ export default function ProductCard({ product }: ProductCardProps) {
   const [cardImageIndex, setCardImageIndex] = useState(0);
 
   // Gallery images array
-  const galleryImages = (Array.isArray(product.images) && product.images.length > 0)
+  const rawGallery = (Array.isArray(product.images) && product.images.length > 0)
     ? product.images
     : ([product.image, product.hoverImage].filter(Boolean) as string[]);
+
+  const galleryImages = rawGallery.length > 0 ? rawGallery : ['/assets/images/p-acc-1.jpg'];
 
   const handlePrevCardImage = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -79,7 +81,8 @@ export default function ProductCard({ product }: ProductCardProps) {
   };
 
   const isWished = wishlist.includes(product.id);
-  const isOut = Boolean(product.isOutOfStock) || product.stock <= 0;
+  const isOut = Boolean(product.isOutOfStock) || (Number(product.stock) <= 0);
+  const priceDisplay = (Number(product.price) || 0).toLocaleString();
 
   return (
     <article
@@ -117,7 +120,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         >
           {galleryImages.map((img, idx) => (
             <div key={idx} className="relative w-full h-full shrink-0 aspect-square">
-              <Image
+              <SafeImage
                 src={img}
                 alt={`${product.name} - ${idx + 1}`}
                 fill
@@ -249,7 +252,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         {/* Price in Naira ₦ */}
         <div className="flex items-baseline gap-2 mt-0.5">
           <span className="text-sm sm:text-base font-bold text-primary">
-            ₦{product.price.toLocaleString()}
+            ₦{priceDisplay}
           </span>
         </div>
 

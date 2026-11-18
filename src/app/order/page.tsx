@@ -3,6 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import SafeImage from '../../components/SafeImage';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useShop, buildOrderWhatsAppUrl } from '../../context/ShopContext';
 import { Order } from '../../types';
@@ -484,7 +485,7 @@ Date: ${new Date(order.createdAt).toLocaleDateString()}`;
                         <div className="flex items-center gap-2.5">
                           {item.image && (
                             <div className="relative w-9 h-9 rounded-lg overflow-hidden border border-border flex-shrink-0">
-                              <Image
+                              <SafeImage
                                 src={item.image}
                                 alt={item.name}
                                 fill

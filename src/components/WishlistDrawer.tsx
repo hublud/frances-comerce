@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import Image from 'next/image';
+import SafeImage from './SafeImage';
 import { useShop } from '../context/ShopContext';
 import { X, Heart, ShoppingBag, Trash2 } from 'lucide-react';
 
@@ -69,7 +69,7 @@ export default function WishlistDrawer() {
             wishedProducts.map((item) => (
               <div key={item.id} className="py-3.5 flex gap-3 first:pt-0">
                 <div className="relative w-18 h-18 rounded-xl overflow-hidden border border-border bg-secondary shrink-0">
-                  <Image src={item.image} alt={item.name} fill className="object-cover" />
+                  <SafeImage src={item.image} alt={item.name} fill className="object-cover" />
                 </div>
 
                 <div className="flex-1 flex flex-col justify-between min-w-0">

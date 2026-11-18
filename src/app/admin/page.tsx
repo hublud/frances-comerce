@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import SafeImage from '../../components/SafeImage';
 import { useShop } from '../../context/ShopContext';
 import { Product, ProductVariationType, CategoryType, StoreSettings, Order } from '../../types';
 import { SUPABASE_SQL_SCHEMA, getSupabaseConfig, saveSupabaseConfig, testSupabaseConnection } from '../../lib/supabase';
@@ -1970,7 +1971,7 @@ export default function AdminDashboardPage() {
                       {/* Left: Thumbnail & Info */}
                       <div className="flex items-center gap-3 w-full sm:flex-1 min-w-0 overflow-hidden">
                         <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden border border-border bg-secondary shrink-0">
-                          <Image src={p.image} alt={p.name} fill className="object-cover" />
+                          <SafeImage src={p.image} alt={p.name} fill className="object-cover" />
                         </div>
 
                         <div className="min-w-0 flex-1 overflow-hidden">
@@ -2409,7 +2410,7 @@ export default function AdminDashboardPage() {
                                     <div key={idx} className="pt-2 first:pt-0 flex items-center justify-between gap-3 text-xs">
                                       <div className="flex items-center gap-2.5 min-w-0">
                                         <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-border bg-secondary shrink-0">
-                                          <Image src={it.image} alt={it.name} fill className="object-cover" />
+                                          <SafeImage src={it.image} alt={it.name} fill className="object-cover" />
                                         </div>
                                         <div className="truncate">
                                           <p className="font-bold text-foreground truncate">{it.name}</p>

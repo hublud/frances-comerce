@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import SafeImage from './SafeImage';
 import { useShop } from '../context/ShopContext';
 import { Search, Heart, ShoppingBag, Sparkles, Phone, Star, X, Truck } from 'lucide-react';
 
@@ -182,12 +183,12 @@ export default function Header() {
                       className="flex items-center gap-3 p-2 hover:bg-secondary/60 rounded-xl cursor-pointer transition-colors"
                     >
                       <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-border bg-secondary">
-                        <Image src={item.image} alt={item.name} fill className="object-cover" />
+                        <SafeImage src={item.image} alt={item.name} fill className="object-cover" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold text-foreground truncate">{item.name}</p>
                         <p className="text-[11px] font-semibold text-primary">
-                          ₦{item.price.toLocaleString()} · <span className="text-muted-foreground">{item.categoryLabel}</span>
+                          ₦{(Number(item.price) || 0).toLocaleString()} · <span className="text-muted-foreground">{item.categoryLabel}</span>
                         </p>
                       </div>
                     </div>
@@ -290,11 +291,11 @@ export default function Header() {
                     className="flex items-center gap-2.5 p-2 hover:bg-secondary/40"
                   >
                     <div className="relative w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-border bg-secondary">
-                      <Image src={item.image} alt={item.name} fill className="object-cover" />
+                      <SafeImage src={item.image} alt={item.name} fill className="object-cover" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold text-foreground truncate">{item.name}</p>
-                      <p className="text-[10px] font-semibold text-primary">₦{item.price.toLocaleString()}</p>
+                      <p className="text-[10px] font-semibold text-primary">₦{(Number(item.price) || 0).toLocaleString()}</p>
                     </div>
                   </div>
                 ))}

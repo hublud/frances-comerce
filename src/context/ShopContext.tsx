@@ -40,16 +40,33 @@ export const DEFAULT_SETTINGS: StoreSettings = {
 };
 
 export function ensureProductVariations(p: Product): Product {
-  if (Array.isArray(p.variations)) {
-    return {
-      ...p,
-      variations: p.variations
-        .filter((v): v is ProductVariationType => Boolean(v && typeof v === 'object' && v.name))
-        .map(v => ({
-          ...v,
-          options: normalizeVariationOptions(v.options || []),
-        })),
-    };
+  const normalizedImages = Array.isArray(p.images) && p.images.length > 0
+    ? p.images
+    : ([p.image, p.hoverImage].filter(Boolean) as string[]);
+
+  const safeImages = normalizedImages.length > 0 ? normalizedImages : ['/assets/images/p-acc-1.jpg'];
+
+  if (Array.isArray(p.variations) && p.variations.length > 0) {
+    const cleaned = p.variations
+      .filter((v): v is ProductVariationType => Boolean(v && typeof v === 'object' && v.name))
+      .map(v => ({
+        ...v,
+        options: normalizeVariationOptions(v.options || []).filter(Boolean),
+      }))
+      .filter(v => v.options.length > 0);
+
+    if (cleaned.length > 0) {
+      return {
+        ...p,
+        price: Number(p.price) || 0,
+        originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
+        rating: Number(p.rating) || 5.0,
+        reviews: Number(p.reviews) || 0,
+        image: p.image || safeImages[0],
+        images: safeImages,
+        variations: cleaned,
+      };
+    }
   }
 
   const variations: ProductVariationType[] = [];
@@ -57,7 +74,7 @@ export function ensureProductVariations(p: Product): Product {
   if (p.category === 'cases') {
     variations.push({
       name: 'Phone Model',
-      options: ['iPhone 13 / 13 Pro', 'iPhone 14 / 14 Pro', 'iPhone 15 / 15 Pro Max', 'iPhone 16 / 16 Pro Max'],
+      options: ['iPhone 12 / 12 Pro', 'iPhone 13 / 13 Pro', 'iPhone 14 / 14 Pro', 'iPhone 15 / 15 Pro Max', 'iPhone 16 / 16 Pro Max'],
     });
     variations.push({
       name: 'Color / Style',
@@ -84,6 +101,12 @@ export function ensureProductVariations(p: Product): Product {
 
   return {
     ...p,
+    price: Number(p.price) || 0,
+    originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
+    rating: Number(p.rating) || 5.0,
+    reviews: Number(p.reviews) || 0,
+    image: p.image || safeImages[0],
+    images: safeImages,
     variations,
   };
 }

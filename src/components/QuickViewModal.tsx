@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
+import SafeImage from './SafeImage';
 import { useShop } from '../context/ShopContext';
 import { X, ShoppingBag, MessageCircle, Star, Heart, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ProductVariationType } from '../types';
@@ -19,24 +19,56 @@ export default function QuickViewModal() {
   const [selectedVariations, setSelectedVariations] = useState<Record<string, string>>({});
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
+  // Helper for category-based fallback variations
+  const getFallbackVariations = (category?: string, colors?: string[]): ProductVariationType[] => {
+    if (category === 'cases') {
+      return [
+        {
+          name: 'Phone Model',
+          options: ['iPhone 12 / 12 Pro', 'iPhone 13 / 13 Pro', 'iPhone 14 / 14 Pro', 'iPhone 15 / 15 Pro Max', 'iPhone 16 / 16 Pro Max'],
+        },
+        {
+          name: 'Color / Style',
+          options: colors && colors.length > 0 ? colors : ['Blush Pink', 'Pearl Silver'],
+        },
+      ];
+    }
+    if (category === 'beauty') {
+      return [
+        {
+          name: 'Shade / Option',
+          options: colors && colors.length > 0 ? colors : ['Bubblegum Pink', 'Neon Pop Pink'],
+        },
+      ];
+    }
+    if (category === 'accessories') {
+      return [
+        {
+          name: 'Charm / Style',
+          options: colors && colors.length > 0 ? colors : ['Crystal Bow', 'Pearl Cluster'],
+        },
+      ];
+    }
+    return [
+      {
+        name: 'Color',
+        options: colors && colors.length > 0 ? colors : ['Blush Pink', 'Rose Quartz', 'Soft Marshmallow'],
+      },
+      {
+        name: 'Size',
+        options: ['XS', 'S', 'M', 'L', 'XL'],
+      },
+    ];
+  };
+
   // Initialize selected variations when product changes
   useEffect(() => {
     if (quickViewProduct) {
       const initial: Record<string, string> = {};
-      const variations: ProductVariationType[] = Array.isArray(quickViewProduct.variations)
-        ? quickViewProduct.variations
-        : [
-            {
-              name: 'Color',
-              options: quickViewProduct.colorVariants && quickViewProduct.colorVariants.length > 0
-                ? quickViewProduct.colorVariants
-                : ['Blush Pink', 'Rose Quartz', 'Soft Marshmallow'],
-            },
-            {
-              name: 'Size',
-              options: ['XS', 'S', 'M', 'L', 'XL'],
-            },
-          ];
+      const variations: ProductVariationType[] =
+        Array.isArray(quickViewProduct.variations) && quickViewProduct.variations.length > 0
+          ? quickViewProduct.variations
+          : getFallbackVariations(quickViewProduct.category, quickViewProduct.colorVariants);
 
       variations.forEach(v => {
         if (v && v.name && Array.isArray(v.options) && v.options.length > 0) {
@@ -59,35 +91,29 @@ export default function QuickViewModal() {
   const isWished = wishlist.includes(quickViewProduct.id);
 
   // Get active variations list
-  const rawList: ProductVariationType[] = Array.isArray(quickViewProduct.variations)
-    ? quickViewProduct.variations
-    : [
-        {
-          name: 'Color',
-          options: quickViewProduct.colorVariants && quickViewProduct.colorVariants.length > 0
-            ? quickViewProduct.colorVariants
-            : ['Blush Pink', 'Rose Quartz', 'Soft Marshmallow'],
-        },
-        {
-          name: 'Size',
-          options: ['XS', 'S', 'M', 'L', 'XL'],
-        },
-      ];
+  const rawList: ProductVariationType[] =
+    Array.isArray(quickViewProduct.variations) && quickViewProduct.variations.length > 0
+      ? quickViewProduct.variations
+      : getFallbackVariations(quickViewProduct.category, quickViewProduct.colorVariants);
+
   const variationList: ProductVariationType[] = rawList.filter(
-    (v): v is ProductVariationType => Boolean(v && v.name && Array.isArray(v.options))
+    (v): v is ProductVariationType => Boolean(v && v.name && Array.isArray(v.options) && v.options.length > 0)
   );
 
   const variantSummary = Object.entries(selectedVariations)
     .map(([name, opt]) => `${name}: ${opt}`)
     .join(' · ');
 
-  const isOut = Boolean(quickViewProduct.isOutOfStock) || quickViewProduct.stock <= 0;
+  const isOut = Boolean(quickViewProduct.isOutOfStock) || (Number(quickViewProduct.stock) <= 0);
+
+  const priceNum = Number(quickViewProduct.price) || 0;
+  const origPriceNum = quickViewProduct.originalPrice ? Number(quickViewProduct.originalPrice) : null;
 
   const handleInquireWhatsApp = () => {
     const text = encodeURIComponent(
       isOut
-        ? `Hi Frances! 🌸 I am viewing "${quickViewProduct.name}" (₦${quickViewProduct.price.toLocaleString()}) on your website and noticed it is currently Out of Stock.\n• Selected Options: ${variantSummary || 'Standard'}\n\nCould you please let me know when it will be restocked, or can I place a preorder? Thank you! 💕`
-        : `Hello Frances! 🌸 Inquiring about "${quickViewProduct.name}" (₦${quickViewProduct.price.toLocaleString()}) from Francielle.\n• Variations: ${variantSummary || 'Standard'}\n`
+        ? `Hi Frances! 🌸 I am viewing "${quickViewProduct.name}" (₦${priceNum.toLocaleString()}) on your website and noticed it is currently Out of Stock.\n• Selected Options: ${variantSummary || 'Standard'}\n\nCould you please let me know when it will be restocked, or can I place a preorder? Thank you! 💕`
+        : `Hello Frances! 🌸 Inquiring about "${quickViewProduct.name}" (₦${priceNum.toLocaleString()}) from Francielle.\n• Variations: ${variantSummary || 'Standard'}\n`
     );
     window.open(`https://wa.me/2349114336301?text=${text}`, '_blank');
   };
@@ -96,14 +122,16 @@ export default function QuickViewModal() {
     ? quickViewProduct.images
     : ([quickViewProduct.image, quickViewProduct.hoverImage].filter(Boolean) as string[]);
 
+  const safeImages = imagesToDisplay.length > 0 ? imagesToDisplay : ['/assets/images/p-acc-1.jpg'];
+
   const handlePrevImage = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setActiveImageIndex(prev => (prev > 0 ? prev - 1 : imagesToDisplay.length - 1));
+    setActiveImageIndex(prev => (prev > 0 ? prev - 1 : safeImages.length - 1));
   };
 
   const handleNextImage = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setActiveImageIndex(prev => (prev < imagesToDisplay.length - 1 ? prev + 1 : 0));
+    setActiveImageIndex(prev => (prev < safeImages.length - 1 ? prev + 1 : 0));
   };
 
   // Touch swipe handling for mobile
@@ -165,9 +193,9 @@ export default function QuickViewModal() {
                 className="flex w-full h-full transition-transform duration-300 ease-out"
                 style={{ transform: `translateX(-${activeImageIndex * 100}%)` }}
               >
-                {imagesToDisplay.map((img, idx) => (
+                {safeImages.map((img, idx) => (
                   <div key={idx} className="relative w-full h-full shrink-0 aspect-square">
-                    <Image
+                    <SafeImage
                       src={img}
                       alt={`${quickViewProduct.name} - Photo ${idx + 1}`}
                       fill
@@ -189,14 +217,14 @@ export default function QuickViewModal() {
               </div>
 
               {/* Slide Counter Badge */}
-              {imagesToDisplay.length > 1 && (
+              {safeImages.length > 1 && (
                 <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-background/80 backdrop-blur-sm text-[10px] font-mono font-bold text-foreground border border-border/60 shadow-xs z-10 pointer-events-none">
-                  {activeImageIndex + 1} / {imagesToDisplay.length}
+                  {activeImageIndex + 1} / {safeImages.length}
                 </div>
               )}
 
               {/* Prev / Next Slide Chevrons */}
-              {imagesToDisplay.length > 1 && (
+              {safeImages.length > 1 && (
                 <>
                   <button
                     type="button"
@@ -218,9 +246,9 @@ export default function QuickViewModal() {
               )}
 
               {/* Bottom Dot Indicators */}
-              {imagesToDisplay.length > 1 && (
+              {safeImages.length > 1 && (
                 <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-background/80 backdrop-blur-sm shadow-xs border border-border/60 z-10">
-                  {imagesToDisplay.map((_, idx) => (
+                  {safeImages.map((_, idx) => (
                     <button
                       key={idx}
                       type="button"
@@ -238,9 +266,9 @@ export default function QuickViewModal() {
             </div>
 
             {/* Thumbnail switcher if multiple images exist */}
-            {imagesToDisplay.length > 1 && (
+            {safeImages.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {imagesToDisplay.map((img, idx) => (
+                {safeImages.map((img, idx) => (
                   <button
                     key={idx}
                     type="button"
@@ -251,7 +279,7 @@ export default function QuickViewModal() {
                         : 'border-border opacity-70 hover:opacity-100'
                     }`}
                   >
-                    <Image src={img} alt={`Thumb ${idx + 1}`} fill className="object-cover" />
+                    <SafeImage src={img} alt={`Thumb ${idx + 1}`} fill className="object-cover" />
                   </button>
                 ))}
               </div>
@@ -262,7 +290,7 @@ export default function QuickViewModal() {
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-primary">
-                {quickViewProduct.categoryLabel}
+                {quickViewProduct.categoryLabel || quickViewProduct.category || 'Product'}
               </span>
             </div>
 
@@ -275,19 +303,19 @@ export default function QuickViewModal() {
               <div className="flex items-center text-primary">
                 <Star className="w-3.5 h-3.5 fill-primary" />
               </div>
-              <span className="font-bold text-foreground">{quickViewProduct.rating} / 5.0</span>
-              <span>· ({quickViewProduct.reviews} verified reviews)</span>
+              <span className="font-bold text-foreground">{(Number(quickViewProduct.rating) || 5.0).toFixed(1)} / 5.0</span>
+              <span>· ({Number(quickViewProduct.reviews) || 0} verified reviews)</span>
             </div>
 
             {/* Price & Stock in Naira ₦ */}
             <div className="flex items-center justify-between mt-0.5">
               <div className="flex items-baseline gap-2">
                 <span className="text-xl sm:text-2xl font-black text-primary">
-                  ₦{quickViewProduct.price.toLocaleString()}
+                  ₦{priceNum.toLocaleString()}
                 </span>
-                {quickViewProduct.originalPrice && (
+                {origPriceNum && origPriceNum > 0 && (
                   <span className="text-xs text-muted-foreground line-through">
-                    ₦{quickViewProduct.originalPrice.toLocaleString()}
+                    ₦{origPriceNum.toLocaleString()}
                   </span>
                 )}
               </div>
@@ -300,7 +328,7 @@ export default function QuickViewModal() {
                 ) : (
                   <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    In stock ({quickViewProduct.stock ?? 10})
+                    In stock ({Number(quickViewProduct.stock) || 10})
                   </span>
                 )}
               </div>
@@ -308,7 +336,7 @@ export default function QuickViewModal() {
 
             {/* Description */}
             <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-              {quickViewProduct.description}
+              {quickViewProduct.description || 'Lovely, premium quality piece from Francielle.'}
             </p>
 
             {/* DYNAMIC VARIATION SELECTORS (Color, Size, Type, Style, etc.) */}
@@ -327,7 +355,9 @@ export default function QuickViewModal() {
                     </div>
 
                     <div className="flex flex-wrap gap-1.5">
-                      {variation.options.map((opt) => {
+                      {variation.options.map((rawOpt) => {
+                        const opt = String(rawOpt || '').trim();
+                        if (!opt) return null;
                         const isSelected = selectedVal === opt;
                         const isColor = variation.name.toLowerCase().includes('color') || variation.name.toLowerCase().includes('shade');
                         const swatch = isColor ? extractColorHex(opt) : undefined;
