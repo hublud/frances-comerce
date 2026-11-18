@@ -1,5 +1,5 @@
 // Francielle Progressive Web App Service Worker
-const CACHE_NAME = 'francielle-pwa-v1';
+const CACHE_NAME = 'francielle-pwa-v3';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -38,16 +38,20 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // Skip API, Next.js hot reload / dev server requests, and external non-http
+  // 1. NEVER intercept external origins (e.g. Supabase API, external images, WhatsApp)
+  if (url.origin !== self.location.origin) return;
+
+  // 2. NEVER intercept admin, order, or api routes — they must always be 100% live
   if (
+    url.pathname.startsWith('/admin') ||
+    url.pathname.startsWith('/order') ||
     url.pathname.startsWith('/api') ||
-    url.pathname.includes('/_next/webpack-hmr') ||
-    !url.protocol.startsWith('http')
+    url.pathname.includes('/_next/webpack-hmr')
   ) {
     return;
   }
 
-  // Network first with cache fallback
+  // Network first with cache fallback for static assets
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
@@ -64,7 +68,6 @@ self.addEventListener('fetch', (event) => {
           if (cachedResponse) {
             return cachedResponse;
           }
-          // If navigation, return root
           if (event.request.mode === 'navigate') {
             return caches.match('/');
           }

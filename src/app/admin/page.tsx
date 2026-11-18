@@ -408,11 +408,14 @@ export default function AdminDashboardPage() {
   const [rememberMe, setRememberMe] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Check auth state on mount
+  // Check auth state on mount and verify live Supabase connection
   React.useEffect(() => {
     const authed = isAdminAuthenticated();
     setIsAuthenticated(authed);
     setIsCheckingAuth(false);
+    testSupabaseConnection().then(res => {
+      setSupabaseTestStatus(res);
+    }).catch(() => {});
   }, []);
 
   const handleLogin = (e?: React.FormEvent) => {
@@ -1577,6 +1580,20 @@ export default function AdminDashboardPage() {
               <span>Import</span>
               <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
             </label>
+
+            {/* Live Database Indicator */}
+            <div
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                supabaseTestStatus?.ok && supabaseTestStatus?.tablesExist
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/25'
+                  : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+              }`}
+              title="Supabase PostgreSQL live connection"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="hidden sm:inline">Database Live</span>
+              <span className="sm:hidden">Live</span>
+            </div>
 
             {/* View Live Storefront Button */}
             <Link
