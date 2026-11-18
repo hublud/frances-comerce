@@ -21,56 +21,15 @@ export default function QuickViewModal() {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchEndX, setTouchEndX] = useState<number | null>(null);
 
-  // Helper for category-based fallback variations
-  const getFallbackVariations = (category?: string, colors?: string[]): ProductVariationType[] => {
-    if (category === 'cases') {
-      return [
-        {
-          name: 'Phone Model',
-          options: ['iPhone 12 / 12 Pro', 'iPhone 13 / 13 Pro', 'iPhone 14 / 14 Pro', 'iPhone 15 / 15 Pro Max', 'iPhone 16 / 16 Pro Max'],
-        },
-        {
-          name: 'Color / Style',
-          options: colors && colors.length > 0 ? colors : ['Blush Pink', 'Pearl Silver'],
-        },
-      ];
-    }
-    if (category === 'beauty') {
-      return [
-        {
-          name: 'Shade / Option',
-          options: colors && colors.length > 0 ? colors : ['Bubblegum Pink', 'Neon Pop Pink'],
-        },
-      ];
-    }
-    if (category === 'accessories') {
-      return [
-        {
-          name: 'Charm / Style',
-          options: colors && colors.length > 0 ? colors : ['Crystal Bow', 'Pearl Cluster'],
-        },
-      ];
-    }
-    return [
-      {
-        name: 'Color',
-        options: colors && colors.length > 0 ? colors : ['Blush Pink', 'Rose Quartz', 'Soft Marshmallow'],
-      },
-      {
-        name: 'Size',
-        options: ['XS', 'S', 'M', 'L', 'XL'],
-      },
-    ];
-  };
-
   // Initialize selected variations when product changes
   useEffect(() => {
     if (quickViewProduct) {
       const initial: Record<string, string> = {};
-      const variations: ProductVariationType[] =
-        Array.isArray(quickViewProduct.variations) && quickViewProduct.variations.length > 0
-          ? quickViewProduct.variations
-          : getFallbackVariations(quickViewProduct.category, quickViewProduct.colorVariants);
+      const variations: ProductVariationType[] = Array.isArray(quickViewProduct.variations)
+        ? quickViewProduct.variations.filter(
+            (v): v is ProductVariationType => Boolean(v && v.name && Array.isArray(v.options) && v.options.length > 0)
+          )
+        : [];
 
       variations.forEach(v => {
         if (v && v.name && Array.isArray(v.options) && v.options.length > 0) {
@@ -92,13 +51,10 @@ export default function QuickViewModal() {
 
   const isWished = wishlist.includes(quickViewProduct.id);
 
-  // Get active variations list
-  const rawList: ProductVariationType[] =
-    Array.isArray(quickViewProduct.variations) && quickViewProduct.variations.length > 0
-      ? quickViewProduct.variations
-      : getFallbackVariations(quickViewProduct.category, quickViewProduct.colorVariants);
-
-  const variationList: ProductVariationType[] = rawList.filter(
+  // Get active variations list (only explicitly configured variations)
+  const variationList: ProductVariationType[] = (
+    Array.isArray(quickViewProduct.variations) ? quickViewProduct.variations : []
+  ).filter(
     (v): v is ProductVariationType => Boolean(v && v.name && Array.isArray(v.options) && v.options.length > 0)
   );
 
@@ -338,60 +294,62 @@ export default function QuickViewModal() {
               {quickViewProduct.description || 'Lovely, premium quality piece from Francielle.'}
             </p>
 
-            {/* DYNAMIC VARIATION SELECTORS (Color, Size, Type, Style, etc.) */}
-            <div className="space-y-3 pt-1 border-t border-border mt-1">
-              {variationList.map((variation) => {
-                const selectedVal = selectedVariations[variation.name] || (variation.options && variation.options[0]) || '';
-                return (
-                  <div key={variation.name}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[11px] font-bold text-foreground uppercase tracking-wider">
-                        {variation.name}:
-                      </span>
-                      <span className="text-[11px] font-bold text-primary">
-                        {selectedVal}
-                      </span>
-                    </div>
+            {/* DYNAMIC VARIATION SELECTORS (Only rendered if variations were explicitly configured) */}
+            {variationList.length > 0 && (
+              <div className="space-y-3 pt-1 border-t border-border mt-1">
+                {variationList.map((variation) => {
+                  const selectedVal = selectedVariations[variation.name] || (variation.options && variation.options[0]) || '';
+                  return (
+                    <div key={variation.name}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-bold text-foreground uppercase tracking-wider">
+                          {variation.name}:
+                        </span>
+                        <span className="text-[11px] font-bold text-primary">
+                          {selectedVal}
+                        </span>
+                      </div>
 
-                    <div className="flex flex-wrap gap-1.5">
-                      {variation.options.map((rawOpt) => {
-                        const opt = String(rawOpt || '').trim();
-                        if (!opt) return null;
-                        const isSelected = selectedVal === opt;
-                        const isColor = variation.name.toLowerCase().includes('color') || variation.name.toLowerCase().includes('shade');
-                        const swatch = isColor ? extractColorHex(opt) : undefined;
-                        const label = extractColorName(opt);
-                        return (
-                          <button
-                            key={opt}
-                            onClick={() => {
-                              setSelectedVariations(prev => ({
-                                ...prev,
-                                [variation.name]: opt,
-                              }));
-                            }}
-                            className={`text-xs px-3 py-1.5 rounded-full border transition-all flex items-center gap-1.5 tap-feedback ${
-                              isSelected
-                                ? 'border-primary bg-primary text-primary-foreground font-bold shadow-sm shadow-primary/25 ring-2 ring-primary/20 scale-[1.02]'
-                                : 'border-border bg-background text-foreground hover:border-primary/50 hover:bg-secondary/40'
-                            }`}
-                          >
-                            {swatch && (
-                              <span
-                                className="w-3 h-3 rounded-full border border-black/15 shadow-2xs inline-block shrink-0"
-                                style={{ backgroundColor: swatch }}
-                              />
-                            )}
-                            <span>{label}</span>
-                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                          </button>
-                        );
-                      })}
+                      <div className="flex flex-wrap gap-1.5">
+                        {variation.options.map((rawOpt) => {
+                          const opt = String(rawOpt || '').trim();
+                          if (!opt) return null;
+                          const isSelected = selectedVal === opt;
+                          const isColor = variation.name.toLowerCase().includes('color') || variation.name.toLowerCase().includes('shade');
+                          const swatch = isColor ? extractColorHex(opt) : undefined;
+                          const label = extractColorName(opt);
+                          return (
+                            <button
+                              key={opt}
+                              onClick={() => {
+                                setSelectedVariations(prev => ({
+                                  ...prev,
+                                  [variation.name]: opt,
+                                }));
+                              }}
+                              className={`text-xs px-3 py-1.5 rounded-full border transition-all flex items-center gap-1.5 tap-feedback ${
+                                isSelected
+                                  ? 'border-primary bg-primary text-primary-foreground font-bold shadow-sm shadow-primary/25 ring-2 ring-primary/20 scale-[1.02]'
+                                  : 'border-border bg-background text-foreground hover:border-primary/50 hover:bg-secondary/40'
+                              }`}
+                            >
+                              {swatch && (
+                                <span
+                                  className="w-3 h-3 rounded-full border border-black/15 shadow-2xs inline-block shrink-0"
+                                  style={{ backgroundColor: swatch }}
+                                />
+                              )}
+                              <span>{label}</span>
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Selected Combination Summary */}
             {variantSummary && (

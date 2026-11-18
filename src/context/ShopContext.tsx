@@ -47,58 +47,15 @@ export function ensureProductVariations(p: Product): Product {
 
   const safeImages = normalizedImages.length > 0 ? normalizedImages : ['/assets/images/p-acc-1.jpg'];
 
-  if (Array.isArray(p.variations) && p.variations.length > 0) {
-    const cleaned = p.variations
-      .filter((v): v is ProductVariationType => Boolean(v && typeof v === 'object' && v.name))
-      .map(v => ({
-        ...v,
-        options: normalizeVariationOptions(v.options || []).filter(Boolean),
-      }))
-      .filter(v => v.options.length > 0);
-
-    if (cleaned.length > 0) {
-      return {
-        ...p,
-        price: Number(p.price) || 0,
-        originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
-        rating: Number(p.rating) || 5.0,
-        reviews: Number(p.reviews) || 0,
-        image: p.image || safeImages[0],
-        images: safeImages,
-        variations: cleaned,
-      };
-    }
-  }
-
-  const variations: ProductVariationType[] = [];
-
-  if (p.category === 'cases') {
-    variations.push({
-      name: 'Phone Model',
-      options: ['iPhone 12 / 12 Pro', 'iPhone 13 / 13 Pro', 'iPhone 14 / 14 Pro', 'iPhone 15 / 15 Pro Max', 'iPhone 16 / 16 Pro Max'],
-    });
-    variations.push({
-      name: 'Color / Style',
-      options: p.colorVariants && p.colorVariants.length > 0 ? p.colorVariants : ['Blush Pink', 'Pearl Silver'],
-    });
-  } else if (p.category === 'beauty') {
-    variations.push({
-      name: 'Shade / Option',
-      options: p.colorVariants && p.colorVariants.length > 0 ? p.colorVariants : ['Bubblegum Pink', 'Neon Pop Pink'],
-    });
-  } else if (p.category === 'accessories') {
-    variations.push({
-      name: 'Charm / Style',
-      options: p.colorVariants && p.colorVariants.length > 0 ? p.colorVariants : ['Crystal Bow', 'Pearl Cluster'],
-    });
-  } else {
-    // Default variations
-    const colors = p.colorVariants && p.colorVariants.length > 0
-      ? p.colorVariants
-      : ['Blush Pink', 'Rose Quartz', 'Creamy Vanilla'];
-    variations.push({ name: 'Color', options: colors });
-    variations.push({ name: 'Size', options: ['S', 'M', 'L'] });
-  }
+  const cleanedVariations: ProductVariationType[] = Array.isArray(p.variations)
+    ? p.variations
+        .filter((v): v is ProductVariationType => Boolean(v && typeof v === 'object' && v.name))
+        .map(v => ({
+          ...v,
+          options: normalizeVariationOptions(v.options || []).filter(Boolean),
+        }))
+        .filter(v => v.options.length > 0)
+    : [];
 
   return {
     ...p,
@@ -108,7 +65,7 @@ export function ensureProductVariations(p: Product): Product {
     reviews: Number(p.reviews) || 0,
     image: p.image || safeImages[0],
     images: safeImages,
-    variations,
+    variations: cleanedVariations,
   };
 }
 
@@ -519,8 +476,6 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         chosenVariant = product.variations
           .map(v => `${v.name}: ${v.options[0] || 'Standard'}`)
           .join(' · ');
-      } else if (product.colorVariants && product.colorVariants.length > 0) {
-        chosenVariant = `Color: ${product.colorVariants[0]}`;
       }
     }
 
