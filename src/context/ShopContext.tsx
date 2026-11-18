@@ -12,6 +12,7 @@ import {
   fetchProductsFromSupabase,
   fetchOrdersFromSupabase,
   getSupabaseClient,
+  getSupabaseConfig,
   rowToProduct,
   rowToOrder,
 } from '../lib/supabase';
@@ -271,7 +272,9 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       .catch(() => {});
 
     // E. Supabase Realtime multi-device WebSocket subscription
-    const client = getSupabaseClient();
+    const config = getSupabaseConfig();
+    const canUseRealtime = Boolean(config.anonKey && !config.anonKey.startsWith('sb_secret_'));
+    const client = canUseRealtime ? getSupabaseClient() : null;
     let productChannel: any = null;
     let orderChannel: any = null;
 

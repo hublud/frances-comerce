@@ -18,6 +18,8 @@ export default function QuickViewModal() {
 
   const [selectedVariations, setSelectedVariations] = useState<Record<string, string>>({});
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
 
   // Helper for category-based fallback variations
   const getFallbackVariations = (category?: string, colors?: string[]): ProductVariationType[] => {
@@ -135,9 +137,6 @@ export default function QuickViewModal() {
   };
 
   // Touch swipe handling for mobile
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
-  const [touchEndX, setTouchEndX] = useState<number | null>(null);
-
   const minSwipeDistance = 40;
 
   const handleTouchStart = (e: React.TouchEvent) => {
