@@ -367,9 +367,12 @@ export async function fetchProductsFromSupabase(): Promise<Product[] | null> {
   // 1. If running in browser, call our secure server-side API route
   if (typeof window !== 'undefined') {
     try {
-      const res = await fetch('/api/products', {
+      const res = await fetch(`/api/products?t=${Date.now()}`, {
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
       });
       if (res.ok) {
         const json = await res.json();

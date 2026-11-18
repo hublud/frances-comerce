@@ -197,8 +197,8 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         if (remoteProducts !== null) {
           setProducts(remoteProducts.map(ensureProductVariations));
         } else {
-          // If network failed completely, fall back only if state is empty
-          setProducts(prev => (prev.length > 0 ? prev : PRODUCTS.map(ensureProductVariations)));
+          // If network failed completely, keep existing state without forcing starter products
+          setProducts(prev => (prev.length > 0 ? prev : []));
         }
       })
       .catch(err => {
@@ -299,11 +299,23 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('visibilitychange', handleRecheck);
     window.addEventListener('focus', handleRecheck);
 
+    // G. Continuous multi-device live polling: automatically refresh catalog every 15s when window is active
+    const pollTimer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchProductsFromSupabase().then(remote => {
+          if (remote !== null && remote.length > 0) {
+            setProducts(remote.map(ensureProductVariations));
+          }
+        }).catch(() => {});
+      }
+    }, 15000);
+
     return () => {
       if (client && productChannel) client.removeChannel(productChannel);
       if (client && orderChannel) client.removeChannel(orderChannel);
       window.removeEventListener('visibilitychange', handleRecheck);
       window.removeEventListener('focus', handleRecheck);
+      clearInterval(pollTimer);
     };
   }, []);
 
@@ -381,6 +393,9 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         showToast(`Failed to save variations: ${res.error || 'Check connection'}`, 'warning');
       } else {
         showToast('Variations saved to live database! ✨', 'sparkle');
+        fetchProductsFromSupabase().then(remote => {
+          if (remote !== null) setProducts(remote.map(ensureProductVariations));
+        }).catch(() => {});
       }
     }
   };
@@ -393,6 +408,9 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       showToast(`Warning: Failed to add "${newProd.name}": ${res.error || 'Check connection'}`, 'warning');
     } else {
       showToast(`Added "${newProd.name}" to live database! 🌸`, 'sparkle');
+      fetchProductsFromSupabase().then(remote => {
+        if (remote !== null) setProducts(remote.map(ensureProductVariations));
+      }).catch(() => {});
     }
   };
 
@@ -413,6 +431,9 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
     }
 
     showToast('Product permanently deleted from database. 🌸', 'info');
+    fetchProductsFromSupabase().then(remote => {
+      if (remote !== null) setProducts(remote.map(ensureProductVariations));
+    }).catch(() => {});
   };
 
   const resetCatalog = async () => {

@@ -400,6 +400,7 @@ export default function AdminDashboardPage() {
   const [supabaseTestStatus, setSupabaseTestStatus] = useState<{ ok: boolean; message: string; tablesExist: boolean } | null>(null);
   const [isSyncingProducts, setIsSyncingProducts] = useState(false);
   const [isFetchingProducts, setIsFetchingProducts] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string>('');
 
   // Authentication states
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -1280,23 +1281,37 @@ export default function AdminDashboardPage() {
   };
 
   // Pull catalog from Supabase
-  const handlePullCatalogFromSupabase = async () => {
+  const handlePullCatalogFromSupabase = async (arg?: boolean | React.MouseEvent | unknown) => {
+    const isSilent = typeof arg === 'boolean' ? arg : false;
     setIsFetchingProducts(true);
     try {
       const res = await fetchFromSupabase();
+      setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       if (res.error) {
-        showToast(`Fetch error: ${res.error}`, 'warning');
+        if (!isSilent) showToast(`Fetch error: ${res.error}`, 'warning');
       } else if (res.count > 0) {
-        showToast(`Loaded ${res.count} products from Supabase! 🌸`, 'sparkle');
+        if (!isSilent) showToast(`Loaded ${res.count} products from Supabase! 🌸`, 'sparkle');
       } else {
-        showToast('No products found in Supabase yet. Push your local catalog first!', 'info');
+        if (!isSilent) showToast('No products found in Supabase yet. Push your local catalog first!', 'info');
       }
     } catch (e: any) {
-      showToast(`Fetch failed: ${e.message}`, 'warning');
+      if (!isSilent) showToast(`Fetch failed: ${e.message}`, 'warning');
     } finally {
       setIsFetchingProducts(false);
     }
   };
+
+  // Auto-pull live catalog on mount & periodically when authenticated
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+    handlePullCatalogFromSupabase(true);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        handlePullCatalogFromSupabase(true);
+      }
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
 
   // Filtered Products
   const filteredProducts = products.filter(p => {
@@ -1308,8 +1323,13 @@ export default function AdminDashboardPage() {
   });
 
   // Calculate Metrics
-  const totalCatalogValue = products.reduce((acc, p) => acc + (p.price * p.stock), 0);
-  const totalVariationsCount = products.reduce((acc, p) => acc + (p.variations ? p.variations.length : 0), 0);
+  const totalCatalogValue = products.reduce((acc, p) => acc + (Number(p.price || 0) * Number(p.stock || 0)), 0);
+  const productsWithVariationsCount = products.filter(p => Array.isArray(p.variations) && p.variations.length > 0).length;
+  const totalVariationsCount = products.reduce((acc, p) => acc + (Array.isArray(p.variations) ? p.variations.length : 0), 0);
+  const totalVariationOptionsCount = products.reduce((acc, p) => {
+    if (!Array.isArray(p.variations)) return acc;
+    return acc + p.variations.reduce((vAcc, v) => vAcc + (Array.isArray(v.options) ? v.options.length : 0), 0);
+  }, 0);
 
   // Navigation Items Config
   const navItems = [
@@ -1754,6 +1774,36 @@ export default function AdminDashboardPage() {
         {/* MAIN CONTENT AREA */}
         <main className="flex-1 min-w-0 p-3 sm:p-6 lg:p-8 space-y-6 pb-28 lg:pb-12">
 
+        {/* Live Cloud Status & Quick Sync Header */}
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <span className="text-xs font-black uppercase tracking-wider text-foreground">
+              Live Cloud Metrics
+            </span>
+            <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+              <span>●</span> Direct Supabase Sync
+            </span>
+            {lastSyncedAt && (
+              <span className="text-[10px] text-muted-foreground font-medium hidden sm:inline">
+                · Synced at {lastSyncedAt}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => handlePullCatalogFromSupabase(false)}
+            disabled={isFetchingProducts}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary hover:bg-secondary/80 text-foreground text-xs font-bold transition-all border border-primary/20 tap-feedback disabled:opacity-50"
+            title="Refresh metrics live from database"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-primary ${isFetchingProducts ? 'animate-spin' : ''}`} />
+            <span>{isFetchingProducts ? 'Syncing...' : 'Sync Live Now'}</span>
+          </button>
+        </div>
+
         {/* 1. Metrics Overview Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="p-4 rounded-3xl bg-card border border-border shadow-xs">
@@ -1761,8 +1811,12 @@ export default function AdminDashboardPage() {
               <span className="text-xs font-bold uppercase tracking-wider">Total Products</span>
               <Package className="w-4 h-4 text-primary" />
             </div>
-            <p className="text-2xl sm:text-3xl font-black text-foreground">{products.length}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Across 4 Girly Categories</p>
+            <p className="text-2xl sm:text-3xl font-black text-foreground">
+              {isFetchingProducts && products.length === 0 ? '...' : products.length}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {products.length === 1 ? '1 Live Item in Cloud' : `${products.length} Live Items in Cloud`}
+            </p>
           </div>
 
           <div className="p-4 rounded-3xl bg-card border border-border shadow-xs">
@@ -1771,7 +1825,7 @@ export default function AdminDashboardPage() {
               <DollarSign className="w-4 h-4 text-primary" />
             </div>
             <p className="text-2xl sm:text-3xl font-black text-primary">
-              ₦{(totalCatalogValue / 1000).toFixed(0)}k
+              ₦{totalCatalogValue >= 1000 ? `${(totalCatalogValue / 1000).toFixed(1)}k` : totalCatalogValue.toLocaleString()}
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">₦{totalCatalogValue.toLocaleString()} in stock</p>
           </div>
@@ -1782,7 +1836,11 @@ export default function AdminDashboardPage() {
               <Sliders className="w-4 h-4 text-primary" />
             </div>
             <p className="text-2xl sm:text-3xl font-black text-foreground">{totalVariationsCount}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Phone Models, Colors, Sizes</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {totalVariationOptionsCount > 0
+                ? `${totalVariationOptionsCount} options across ${productsWithVariationsCount} items`
+                : 'Phone Models, Colors, Sizes'}
+            </p>
           </div>
 
           <div className="p-4 rounded-3xl bg-card border border-border shadow-xs">

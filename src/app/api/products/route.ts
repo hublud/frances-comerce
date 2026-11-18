@@ -4,6 +4,7 @@ import { rowToProduct, getServerSecretKey, AUTHORITATIVE_SUPABASE_URL } from '@/
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 export async function GET() {
   try {
@@ -27,7 +28,10 @@ export async function GET() {
     const products = Array.isArray(data) ? data.map(rowToProduct) : [];
     return NextResponse.json({ ok: true, products }, {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'Surrogate-Control': 'no-store',
       },
     });
   } catch (err: any) {
